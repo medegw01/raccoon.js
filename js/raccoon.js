@@ -130,10 +130,37 @@ let Raccoon = function(fen_pos){
     const is_minor_piece  = [false, false, true, true, false, false, false, false, true, true, false, false, false];
     const is_pawn         = [false, true, false, false, false, false, false, true, false, false, false, false, false];
     const is_knight          = [false, false, false, true, false, false, false, false, false, true, false, false, false];
+    const is_bishop          = [false, false, true, false, false, false, false, false, true, false, false, false, false];
     const is_king            = [false, false, false, false, false, false, true, false, false, false, false, false, true];
+    const is_queen           = [false, false, false, false, false, true, false, false, false, false, false, true, false];
+    const is_rook            = [false, false, false, false, true, false, false, false, false, false, true, false, false];
     const is_rook_or_queen   = [false, false, false, false, true, true, false, false, false, false, true, true, false];
     const is_bishop_or_queen = [false, false, true, false, false, true, false, false, true, false, false, true, false];
     const is_slide_piece     = [false, false, true, false, true, true, false, false, true, false, true, true, false];
+    const is_white_piece    = [false, true, true, true, true, true, true, false, false, false, false, false, false];
+
+    const is_color_bishop = [
+        [false, false, true, false, false, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, true, false, false, false, false]
+    ];
+    const is_color_knight =[
+        [false, false, false, true, false, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false, true, false, false, false]
+    ];
+    const is_color_rook = [
+        [false, false, false, false, true, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false, false, true, false, false]
+    ];
+    const is_color_queen = [
+        [false, false, false, false, false, true, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false, false, false, true, false]
+    ];
+    const is_color_pawn = [
+        [false, true, false, false, false, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, true, false, false, false, false, false]
+    ];
+
+
 
     let piece_keys = new Array(14*120);
     let castlekeys = new Array(16);
@@ -292,6 +319,7 @@ let Raccoon = function(fen_pos){
             }
         }
     }
+
     function initialize() {
         initialize_square120_to_square64();
         //initialize_bitmask()
@@ -314,6 +342,16 @@ let Raccoon = function(fen_pos){
         val &= 0xFFFFFFFF;
         let hex = val.toString(16).toUpperCase();
         return ("00000000" + hex).slice(-8);
+    }
+    function count_set_bits32(i) {
+            let count = 0;
+            i = i - ((i >> 1) & 0x55555555);
+            i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+            i = (i + (i >> 4)) & 0x0f0f0f0f;
+            i = i + (i >> 8);
+            i = i + (i >> 16);
+            count += i & 0x3f;
+            return count;
     }
     function get_time_ms(){
         return new Date().getTime();
@@ -640,6 +678,227 @@ let Raccoon = function(fen_pos){
     const rook_direction   = [-1, -10,	1, 10 ];
     const bishop_direction = [ -9, -11, 11, 9 ];
     const king_direction  = [-1, -10,	1, 10, -9, -11, 11, 9 ];
+
+    function pinned_direction(color, sq) {
+        let pce = board.pieces[sq];
+        let tmp_sq, tmp_pce;
+        if (pce === PIECES.EMPTY) return 0;
+        let sign = ((color === COLORS.WHITE) ^ is_white_piece[pce])? -1: 1;
+        let king_sq = board.kings[color];
+        let king_r = ranks_board[king_sq];
+        let king_f = files_board[king_sq];
+
+        let pce_r = ranks_board[sq];
+        let pce_f = files_board[sq];
+
+        if (sq === king_sq) return 0;
+        function look(dir, rtn, pce_checker) {
+            let seen = false;
+            tmp_sq = king_sq + dir;
+            while (SQUARE_ON_BOARD(tmp_sq)) {
+                tmp_pce = board.pieces[tmp_sq];
+                if (tmp_pce !== PIECES.EMPTY) {
+                    if (seen) {
+                        if (pce_checker[tmp_pce] && ((color === COLORS.WHITE) ^ is_white_piece[tmp_pce])) return sign*rtn;
+                        break;
+                    } else {
+                        if (sq === tmp_sq) {
+                            seen = true;
+                        } else return 0;
+                    }
+                }
+                tmp_sq += dir;
+            }
+            return 0;
+        }
+        //-- horizontal return 1
+        if (king_r === pce_r) {
+            return look((pce_f > king_f) ? 1 : -1, 1, is_rook_or_queen);
+        }
+        //-- vertical return 3
+        else if (king_f === pce_f) {
+            return look((pce_r > king_r) ? 10 : -10, 3, is_rook_or_queen);
+        }
+        //-- top left to bottom right return 2
+        else if ((king_f > pce_f && king_r < pce_r) || (king_f < pce_f && king_r > pce_r)) {
+            return look((pce_f > king_f) ? -9 : 9, 2, is_bishop_or_queen);
+        } else { //-- top-right to bottom-left return 4
+            return look((pce_f > king_f) ? 11 : -11, 4, is_bishop_or_queen);
+        }
+    }
+    function pinned(color, sq) {
+        if(board.pieces[sq] === PIECES.EMPTY) return 0;
+        return pinned_direction(color, sq) > 0 ? 1 : 0;
+    }
+    function walker(color, tmp_sq, dir, mj_checker, mn_checker, t_sq=1000) {
+        let pce, is_pinned;
+        while(SQUARE_ON_BOARD(tmp_sq)){
+            pce = board.pieces[tmp_sq];
+            is_pinned = pinned(color, tmp_sq);
+            if (pce === PIECES.EMPTY){
+                tmp_sq += dir;
+                continue;
+            }
+
+            else if(!mj_checker[pce] || (is_pinned || pinned(color^1, tmp_sq))){
+                break;
+            }
+            else if (mn_checker[pce] && !((color === COLORS.WHITE) ^ is_white_piece[pce])) {
+                return (t_sq===1000)? !is_pinned: (!is_pinned && tmp_sq === t_sq);
+            }
+            tmp_sq += dir;
+        }
+        return 0;
+    }
+    function slide_attack(color, sq, mj_pce_check, pce_check) {
+        let v = 0;
+        let tmp_sq, i;
+        for(i = 0; i<4; i++) {
+            tmp_sq = sq + rook_direction[i];
+            v += walker(color, tmp_sq, rook_direction[i], mj_pce_check, pce_check);
+        }
+        return v;
+    }
+    const DIR= {//-- white pov
+        UP:0,
+        DOWN:1,
+        LEFT:2,
+        RIGHT:3,
+        UP_LEFT:4,
+        UP_RIGHT:5,
+        DOWN_LEFT:6,
+        DOWN_RIGHT:7,
+        SAME:8,
+    };
+    function get_direction(from, to) {
+        let from_r = ranks_board[from];
+        let from_f = files_board[from];
+        let to_f = files_board[to];
+        let to_r = ranks_board[to];
+        if(from === to) return DIR.SAME;
+        else if(from_r === to_r) return (from_f > to_f)? DIR.LEFT: DIR.RIGHT;
+        else if(from_f === to_f) return (from_r > to_r)? DIR.DOWN: DIR.UP;
+        else if(from_r > to_r) return  (from_f > to_f)? DIR.DOWN_LEFT: DIR.DOWN_RIGHT;
+        return (from_f > to_f)? DIR.UP_LEFT: DIR.UP_RIGHT;
+    }
+    function same_diagonal(a, b){
+        return Math.abs(files_board[a]-files_board[b]) === Math.abs(ranks_board[a]-ranks_board[b])
+    }
+    function diagonal_attack(color, sq, mj_pce_checker, pce_checker) {
+        let v = 0;
+        let tmp_sq, i;
+        for(i = 0; i<8; i++) {
+            tmp_sq = sq + bishop_direction[i];
+            v += walker(color, tmp_sq, bishop_direction[i], mj_pce_checker, pce_checker);
+        }
+        return v;
+    }
+
+    function bishop_xray_attack(color, sq, b_sq=SQUARES.OFF_BOARD, xray=true) {
+        let mj = (xray)? is_bishop_or_queen: is_color_bishop[color];
+        if (b_sq !== SQUARES.OFF_BOARD) {//-- determine direction
+            let b = (color === COLORS.WHITE)? PIECES.WHITEBISHOP: PIECES.BLACKBISHOP;
+            if (b !== board.pieces[b_sq]) return 0;
+            let dir = get_direction(sq, b_sq);
+            if(dir >= DIR.UP_LEFT && dir < DIR.SAME){
+                let dir_tmp = [9, 11, -11, -9][dir - 4];
+                return (same_diagonal(sq, b_sq))? walker(color, sq + dir_tmp, dir_tmp, mj, is_bishop, b_sq): 0;
+            }
+            return 0;
+        }
+        return diagonal_attack(color, sq, mj, is_bishop);
+    }
+    function rook_xray_attack(color, sq, r_sq=SQUARES.OFF_BOARD, xray=true){
+        let mj = (xray)? is_rook_or_queen: is_color_rook[color];
+        if(r_sq !== SQUARES.OFF_BOARD){
+            let r = (color === COLORS.WHITE)? PIECES.WHITEROOK: PIECES.BLACKROOK;
+            if (r !== board.pieces[r_sq]) return 0;
+            let dir = get_direction(sq, r_sq);
+            if(dir < DIR.UP_LEFT){
+                let dir_tmp = [10, -10, -1, 1][dir];
+                return walker(color, sq + dir_tmp, dir_tmp, mj, is_rook, r_sq);
+            }
+            return 0;
+        }
+        return slide_attack(color, sq, mj, is_rook);
+    }
+    function queen_attack(color, sq, q_sq=SQUARES.OFF_BOARD){
+        if (q_sq !== SQUARES.OFF_BOARD) {//-- determine direction
+            if(!is_color_queen[color][board.pieces[q_sq]]) return 0;
+            let dir = get_direction(sq, q_sq);
+            let dir_tmp;
+            if (dir >= DIR.UP_LEFT && dir < DIR.SAME){
+                dir_tmp  = [9, 11, -11, -9][dir - 4];
+                if (!same_diagonal(sq, q_sq)) return 0;
+            }
+            else dir_tmp  = [10, -10, -1, 1][dir];
+            return walker(color, sq + dir_tmp, dir_tmp, is_color_queen[color], is_queen, q_sq);
+        }
+        let v = 0;
+        v += slide_attack(color, sq, is_color_queen[color], is_queen);
+        v += diagonal_attack(color, sq, is_color_queen[color], is_queen);
+        return v;
+    }
+
+    function knight_attack(color, sq, kn_sq=SQUARES.OFF_BOARD) {
+        if(kn_sq !== SQUARES.OFF_BOARD && !is_knight[board.pieces[kn_sq]]) return 0;
+        let v = 0;
+        let pce, tmp_sq, i, is_pinned;
+        for(i = 0; i<8; i++) {
+            tmp_sq = sq + knight_direction[i];
+            pce = board.pieces[tmp_sq];
+            is_pinned = pinned(color, tmp_sq);
+            if(SQUARE_ON_BOARD(tmp_sq)){
+                if(kn_sq !== SQUARES.OFF_BOARD){
+                    if (tmp_sq === kn_sq) return !is_pinned;
+                }
+                else{
+                    if(is_knight[pce] && get_color_piece[pce] === color){
+                        v += (is_pinned)? 0: 1;
+                    }
+                }
+            }
+        }
+        return (kn_sq === SQUARES.OFF_BOARD)? v: 0;
+    }
+
+    function attack(color, square) {
+        let v=0;
+        v += pawn_attack(color, square);
+        v += king_attack(color, square);
+        v += knight_attack(color, square);
+        v += bishop_xray_attack(color, square);
+        v += rook_xray_attack(color, square);
+        v += queen_attack(color, square);
+        return v;
+    }
+    function pawn_attack(color, sq, p_sq=SQUARES.OFF_BOARD) {
+        let v   = 0;
+        let pce = (color === COLORS.WHITE)? PIECES.WHITEPAWN: PIECES.BLACKPAWN;
+        let sg  = (color === COLORS.WHITE)? -1: 1;
+        if(p_sq !== SQUARES.OFF_BOARD){
+            if (pce !== board.pieces[p_sq]) return 0;
+            return (p_sq === (sq + (sg*11))) || (p_sq === (sq + (sg*9)));
+        }
+        if (board.pieces[sq + (sg*11)] === pce) v++;
+        if (board.pieces[sq + (sg*9)] === pce) v++;
+        return v;
+    }
+    function king_attack(color, sq, k_sq=SQUARES.OFF_BOARD) {
+        let tmp_sq, i, pce;
+        let v = 0;
+        let k = (color === COLORS.WHITE)? PIECES.WHITEKING: PIECES.BLACKKING;
+        if(k_sq !== SQUARES.OFF_BOARD && (k !== board.pieces[k_sq])) return 0;
+        for(i = 0; i<8; i++) {
+            tmp_sq = sq + king_direction[i];
+            pce = board.pieces[tmp_sq];
+            if(SQUARE_ON_BOARD(tmp_sq)){
+                if(tmp_sq === k_sq || k === pce ) return ++v;
+            }
+        }
+        return 0;
+    }
+
     function is_square_attacked(square, turn) {
         let piece, direction, tmp_square;
         // pawns
@@ -1542,6 +1801,131 @@ let Raccoon = function(fen_pos){
         MG: 0,
         EG: 1,
     };
+    const pawn_psqt = [
+        [
+            0, 0, 0, 0, 0, 0, 0, 0,
+            3, 3, 10, 19, 16, 19, 7, -5,
+            -9, -15, 11, 15, 32, 22,  5, -22,
+            -8, -23, 6, 20, 40, 17, 4, -12,
+            13, 0, -13, 1, 11, -2,  -13, 5,
+            -5, -12, -7, 22, -8, -5, -15, -18,
+            -7, 7, -3, -13, 5, -16, 10, -8,
+            0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        [
+            0, 0, 0, 0, 0, 0, 0, 0,
+            -10, -6, 10,  0, 14,  7, -5, -19,
+            -10, -10, -10,  4,  4,  3, -6, -4,
+            6, -2, -8, -4, -13, -12, -10, -9,
+            9,  4,  3, -12 , -12, -6 , 13 ,  8,
+            28, 20, 21, 28, 30,  7,  6, 13,
+            0, -11, 12, 21, 25, 19,  4,  7,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        ]
+    ];
+    const bishop_psqt = [
+        [
+            -53, -5, -8,-23, -23, -8, -5, -53,
+            -15, 8, 19, 4, 4, 19, 8, -15,
+            -7, 21, -5, 17, 17, -5, 21, -7,
+            -5, 11, 25, 39, 39, 25, 11, -5,
+            -12, 29, 22, 31, 31, 22, 29, -12,
+            -16, 6,  1,  11, 11, 1, 6, -16,
+            -17, -14, 5, 0, 0, 5, -14, -17,
+            -48, 1, -14, -23,-23, -14, 1, -48,
+        ],
+        [
+            -57, -30, -37, -12, -12, -37, -30, -57,
+            -37, -13, -17, 1, 1, -17, -13, -37,
+            -16, -1, -2, 10, 10, -2, -1, -16,
+            -20,  -6,  0,  17, 17, 0, -6, -20,
+            -17, -1, -14, 15, 15, -14, -1, -17,
+            -30, 6, 4, 6, 6, 4, 6, -30,
+            -31, -20, -1, 1, 1, -1, -20, -31,
+            -46, -42, -37, -24, -24, -37, -42, -46,
+        ]
+    ];
+    const knight_psqt = [
+        [
+            -175, -92, -74, -73, -73, -74, -92, -175,
+            -77, -41, -27, -15, -15, -27, -41,  -77,
+            -61, -17,   6,  12,  12,   6, -17,-61,
+            -35, 8, 40, 49, 49, 40, 8, -35,
+            -34, 13, 44, 51, 51, 44, 13, -34,
+            -9, 22, 58, 53, 53, 58, 22,-9,
+            -67, -27, 4, 37, 37, 4, -27, -67,
+            -201, -83, -56,-26, -26,-56,-83,-201,
+        ],
+        [
+            -96, -65, -49,-21, -21, -49, -65, -96,
+            -67, -54, -18, 8, 8, -18, -54, -67,
+            -40,-27, -8, 29, 29, -8, -27, -40,
+            -35, -2, 13, 28, 28, 13, -2, -35,
+            -45, -16, 9, 39, 39, 9, -16, -45,
+            -51, -44, -16, 17, 17, -16, -44, -51,
+            -69 ,-50, -51, 12, 12, -51, -50, -69,
+            -100, -88, -56, -17, -17, -56, -88, -100,
+        ]
+    ];
+    const rook_psqt =[
+        [
+            -31, -20, -14 -5,-5, -14, -20, -31,
+            -21, -13, -8,  6, 6, -8, -13, -21,
+            -25, -11,  -1,  3, 3, -1, -11, -25,
+            -13,  -5, -4, -6,-6, -4, -5, -13,
+            -27, -15,  -4,  3, 3, -4, -15, -27,
+            -22, -2, 6, 12, 12, 6, -2, -22,
+            -2, 12,  16, 18, 18, 16, 12, -2,
+            -17, -19, -1,  9, 9, -1, -19, -17,
+        ],
+        [
+            -9,-13,-10, -9, -9, -10, -13, -9,
+            -12, -9, -1,  -2, -2, -1, -9, -12,
+            6, -8, -2, -6, -6, -2, -8, 6,
+            -6, 1, -9, 7, 7, -9, 1, -6,
+            -5,  8, 7, -6, -6, 7, 8, -5,
+            6, 1, -7, 10, 10, -7, 1, 6,
+            4, 5, 20, -5, -5, 20, 5, 4,
+            18,  0,  19, 13, 13, 19, 0, 18
+        ]
+    ];
+    const queen_psqt =[
+        [
+            3, -5, -5, 4, 4, -5, -5, 3,
+            -3, 5, 8, 12, 12, 8, 5, 3,
+            -3, 6, 13, 7, 7, 13, 6, -3,
+            4, 5,  9,  8, 8, 9, 5, 4,
+            0, 14, 12, 5, 5, 12, 14, 0,
+            -4, 10, 6, 8, 8, 6, 10, -4,
+            -5, 6, 10, 8, 8, 10, 6, -5,
+            -2, -2, 1, -2, -2, 1, -2, -2,
+        ],
+        [
+            -69, -57, -47, -26, -26, -47, -57, -69,
+            -55, -31, -22, -4, -4, -22, -31, -55,
+            -39, -18, -9, 3, 3, -9, -18, -39,
+            -23, -3, 13, 24, 24, 13, -3, -23,
+            -29, -6, 9, 21, 21, 9, -6, -29,
+            -38, -18, -12, 1, 1, -12, -18, -38,
+            -50, -27, -24, -8, -8, -24, -27, -50,
+            -75, -52, -43, -36, -36, -43, -52, -75,
+        ]
+    ];
+    const mobility_bonus = [
+        [
+            [-62,-53,-12,-4,3,13,22,28,33],
+            [-48,-20,16,26,38,51,55,63,63,68,81,81,91,98],
+            [-58,-27,-15,-10,-5,-2,9,16,30,29,32,38,46,48,58],
+            [-39,-21,3,3,14,22,28,41,43,48,56,60,60,66,67,70,71,73,79,88,88,99,102,102,106,109,113,116]
+        ],
+        [
+            [-81,-56,-30,-14,8,15,23,27,33],
+            [-59,-23,-3,13,24,42,54,57,65,73,78,86,88,97],
+            [-76,-18,28,55,69,82,112,118,132,142,155,165,166,169,171],
+            [-36,-15,8,18,34,54,61,73,79,92,94,104,113,120,123,126,133,136,140,143,148,166,170,175,184,191,206,212]
+        ]
+    ];
+    /*
     const psqt = [
         [//-- pawns
             [
@@ -1676,9 +2060,9 @@ let Raccoon = function(fen_pos){
                 11, 59, 73, 78, 78, 73, 59, 11,
             ]
         ],
-    ];
-    function psqt_score(rlt) {
-        for (let pce = PIECES.WHITEPAWN; pce <= PIECES.BLACKKING; pce++) {
+    ];*/
+    function psqt_score(rlt) {//-- TODO SEPERATE THEM
+        for (let pce = PIECES.BLACKBISHOP; pce <= PIECES.BLACKKING; pce++) {
             for (let i = 0; i < board.number_pieces[pce]; ++i) {
                 let sq = board.piece_list[PIECE_INDEX(pce,i)];
                 if (pce <= PIECES.WHITEKING) {
@@ -1752,107 +2136,139 @@ let Raccoon = function(fen_pos){
         rlt.middlegame += ((v / 16) << 0);
         rlt.endgame += ((v / 16) << 0);
     }
+    function supported(color, sq) {
+        let my_pawn  = color*6 + 1;
+        let sg = (color === COLORS.WHITE)? - 1: 1;
+        let p = 0;
+        if (SQUARE_ON_BOARD(sq + 9*sq) && (board.pieces[sq + 9*sg] === my_pawn)) p++;
+        if (SQUARE_ON_BOARD(sq + 11*sq) && (board.pieces[sq + 11*sg] === my_pawn)) p++;
+        return p;
+    }
+    //-- penalties
+    const isolated_pawn       = [5, 15];
+    const backward_pawn       = [9, 24];
+    const double_pawn         = [11, 56];
+    const weak_unopposed_pawn = [13, 27];
+    const weak_lever_pawn     = [0, 56];
+
+
+    function phalanx(color, sq){
+        let my_pawn  = color*6 + 1;
+        if (SQUARE_ON_BOARD(sq + 1) && (board.pieces[sq +  1] === my_pawn)) return 1;
+        if (SQUARE_ON_BOARD(sq - 1) && (board.pieces[sq - 1] === my_pawn)) return 1;
+        return 0;
+    }
+    function connected(color, sq) {
+        return (supported(color, sq) || phalanx(color, sq))? 1: 0;
+    }
+    function opposed(color, sq){
+        return +(board.pawns[color^1].files[files_board[sq]] > 0);
+    }
+    function weak_unopposed(color, sq) {
+        if (opposed(color, sq)) return 0;
+        let p = 0;
+        if (isolated(color, sq)) p++;
+        else if (backward(color, sq)) p++;
+        return p;
+    }
+    function backward(color, sq) {
+        //--TODO optimize this function
+        let opp_pawn = (color^1)*6 + 1;
+        let dir = (color === COLORS.WHITE)? -1: 1;
+
+        //--check it's behide
+        let tmp_sq = sq;
+        while (SQUARE_ON_BOARD(tmp_sq)){
+            if(phalanx(color, tmp_sq)) return 0;
+            tmp_sq += (10*dir);
+        }
+        if((SQUARE_ON_BOARD(sq - 19*dir) && board.pieces[sq - 19*dir] === opp_pawn) ||
+            (SQUARE_ON_BOARD(sq - 21*dir) && board.pieces[sq - 21*dir]=== opp_pawn)) return 1;
+        return 0;
+    }
+    function weak_lever(color, sq) {
+        let opp_pawn  = (color^1)*6 + 1;
+        let sg = (color === COLORS.WHITE)? 1: -1;
+        if(!supported(color, sq)){
+            if (SQUARE_ON_BOARD(sq + 9*sq) && (board.pieces[sq + 9*sg] !== opp_pawn)) return 0;
+            if (SQUARE_ON_BOARD(sq + 11*sq) && (board.pieces[sq + 11*sg] !== opp_pawn)) return 0;
+            return 1;
+        }
+        return 0;
+    }
+    function connected_bonus(color, sq) {
+        let seed = [0, 7, 8, 12, 29, 48, 86];
+        let op = opposed(color, sq);
+        let ph = phalanx(color, sq);
+        let su = supported(color, sq);
+        let r = ranks_board[sq];
+        if (r === RANKS.FIRST_RANK || r === RANKS.EIGHTH_RANK) return 0;
+        r = (color === COLORS.WHITE)?r: 7-r;
+        return seed[r] * (2 + ph - op) + 21 * su;
+    }
+    function isolated(color, sq) {
+        let file = files_board[sq];
+        if (file === FILES.A_FILE) return !board.pawns[color].files[FILES.B_FILE];
+        else if(file === FILES.H_FILE) return !board.pawns[color].files[FILES.G_FILE];
+        else return !board.pawns[color].files[file + 1] && !board.pawns[color].files[file - 1];
+    }
+    function doubled(color, sq) {
+        /*
+         In Stockfish doubled pawn penalty is attached only for pawn which has another friendly
+         pawn on square directly behind that pawn and is not supported
+         */
+        //return (board.pawns[color].files[files_board[sq]] > 1);
+        let my_pawn  = color*6 + 1;
+        let sg = (color === COLORS.WHITE)? - 1: 1;
+        if (board.pieces[sq + 10*sg] !== my_pawn) return false;
+        if (SQUARE_ON_BOARD(sq + 9*sq) && (board.pieces[sq + 9*sg] === my_pawn)) return false;
+        return !(SQUARE_ON_BOARD(sq + 11 * sq) && (board.pieces[sq + 11 * sg] === my_pawn));
+
+    }
+
+    let pawns_squares, central_blocked_pawns;
+
+    function is_center(sq){
+        let file = files_board[sq];
+        return (file === FILES.C_FILE || file === FILES.D_FILE || file === FILES.E_FILE || file === FILES.F_FILE)
+    }
 
     function pawns_total(rlt) {
-        //-- penalties
-        const isolated_pawn       = [5, 15];
-        const backward_pawn       = [9, 24];
-        const double_pawn         = [11, 56];
-        const weak_unopposed_pawn = [13, 27];
-        const weak_lever_pawn     = [0, 56];
-        function phalanx(color, sq){
-            let my_pawn  = color*6 + 1;
-            if (SQUARE_ON_BOARD(sq + 1) && (board.pieces[sq +  1] === my_pawn)) return 1;
-            if (SQUARE_ON_BOARD(sq - 1) && (board.pieces[sq - 1] === my_pawn)) return 1;
-            return 0;
-        }
-        function supported(color, sq) {
-            let my_pawn  = color*6 + 1;
-            let sg = (color === COLORS.WHITE)? - 1: 1;
-            let p = 0;
-            if (SQUARE_ON_BOARD(sq + 9*sq) && (board.pieces[sq + 9*sg] === my_pawn)) p++;
-            if (SQUARE_ON_BOARD(sq + 11*sq) && (board.pieces[sq + 11*sg] === my_pawn)) p++;
-            return p;
-        }
-        function connected(color, sq) {
-            return (supported(color, sq) || phalanx(color, sq))? 1: 0;
-        }
-        function opposed(color, sq){
-            return +(board.pawns[color^1].files[files_board[sq]] > 0);
-        }
-        function weak_unopposed(color, sq) {
-            if (opposed(color, sq)) return 0;
-            let p = 0;
-            if (isolated(color, sq)) p++;
-            else if (backward(color, sq)) p++;
-            return p;
-        }
-        function backward(color, sq) {
-            //--TODO optimize this function
-            let opp_pawn = (color^1)*6 + 1;
-            let dir = (color === COLORS.WHITE)? -1: 1;
-
-            //--check it's behide
-            let tmp_sq = sq;
-            while (SQUARE_ON_BOARD(tmp_sq)){
-                if(phalanx(color, tmp_sq)) return 0;
-                tmp_sq += (10*dir);
-            }
-            if((SQUARE_ON_BOARD(sq - 19*dir) && board.pieces[sq - 19*dir] === opp_pawn) ||
-                (SQUARE_ON_BOARD(sq - 21*dir) && board.pieces[sq - 21*dir]=== opp_pawn)) return 1;
-            return 0;
-        }
-
-        function weak_lever() {
-            return false;
-        }
-
-        function connected_bonus(color, sq) {
-            let seed = [0, 7, 8, 12, 29, 48, 86];
-            let op = opposed(color, sq);
-            let ph = phalanx(color, sq);
-            let su = supported(color, sq);
-            let r = ranks_board[sq];
-            if (r === RANKS.FIRST_RANK || r === RANKS.EIGHTH_RANK) return 0;
-            r = (color === COLORS.WHITE)?r: 7-r;
-            return seed[r] * (2 + ph - op) + 21 * su;
-        }
-        function isolated(color, sq) {
-            let file = files_board[sq];
-            if (file === FILES.A_FILE) return !board.pawns[color].files[FILES.B_FILE];
-            else if(file === FILES.H_FILE) return !board.pawns[color].files[FILES.G_FILE];
-            else return !board.pawns[color].files[file + 1] && !board.pawns[color].files[file - 1];
-        }
-        function doubled(color, sq) {
-            /*
-             In Stockfish doubled pawn penalty is attached only for pawn which has another friendly
-             pawn on square directly behind that pawn and is not supported
-             */
-            //return (board.pawns[color].files[files_board[sq]] > 1);
-            let my_pawn  = color*6 + 1;
-            let sg = (color === COLORS.WHITE)? - 1: 1;
-            if (board.pieces[sq + 10*sg] !== my_pawn) return false;
-            if (SQUARE_ON_BOARD(sq + 9*sq) && (board.pieces[sq + 9*sg] === my_pawn)) return false;
-            return !(SQUARE_ON_BOARD(sq + 11 * sq) && (board.pieces[sq + 11 * sg] === my_pawn));
-
-        }
-
+        //-- reset
+        pawns_squares = [//-- central_pawns[COLORS][COLORS]
+            [0, 0],
+            [0, 0]
+        ];
+        central_blocked_pawns = [//-- blocked_pawns[COLORS]
+            0,
+            0
+        ];
         function pawns(color){
             let i, sq;
             let my_pawn  = color*6 + 1;
             let v = [0, 0];
-            /*
-                A1: 21, B1: 22, C1: 23, D1: 24, E1: 25, F1: 26, G1: 27, H1: 28,
-                A2: 31, B2: 32, C2: 33, D2: 34, E2: 35, F2: 36, G2: 37, H2: 38,
-                A3: 41, B3: 42, C3: 43, D3: 44, E3: 45, F3: 46, G3: 47, H3: 48,
-                A4: 51, B4: 52, C4: 53, D4: 54, E4: 55, F4: 56, G4: 57, H4: 58,
-                A5: 61, B5: 62, C5: 63, D5: 64, E5: 65, F5: 66, G5: 67, H5: 68,
-                A6: 71, B6: 72, C6: 73, D6: 74, E6: 75, F6: 76, G6: 77, H6: 78,
-                A7: 81, B7: 82, C7: 83, D7: 84, E7: 85, F7: 86, G7: 87, H7: 88,
-                A8: 91, B8: 92, C8: 93, D8: 94, E8: 95, F8: 96, G8: 97, H8: 98,
-             */
             for(i = 0; i < board.number_pieces[my_pawn]; i++){
                 sq = board.piece_list[PIECE_INDEX(my_pawn, i)];
+                //-- pawns squares
+                pawns_squares[color][square_color(sq)]++;
+                //-- psqt
+                if(color === COLORS.WHITE){
+                    v[PHASE.EG] += pawn_psqt[PHASE.EG][square_64(sq)];
+                    v[PHASE.MG] += pawn_psqt[PHASE.MG][square_64(sq)];
+                    //-- blocked central pawns
+                    if(is_center(sq) && SQUARE_ON_BOARD(sq+10) && board.pieces[sq+10] !== PIECES.EMPTY){
+                        central_blocked_pawns[COLORS.WHITE]++;
+                    }
+                }
+                else{
+                    v[PHASE.EG] += pawn_psqt[PHASE.EG][flip[square_64(sq)]];
+                    v[PHASE.MG] += pawn_psqt[PHASE.MG][flip[square_64(sq)]];
+                    //-- blocked central pawns
+                    if(is_center(sq) && SQUARE_ON_BOARD(sq-10) && board.pieces[sq-10] !== PIECES.EMPTY){
+                        central_blocked_pawns[COLORS.BLACK]++;
+                    }
+                }
+                //-- bonus
                 if(isolated(color, sq)) {
                     v[PHASE.MG] -= isolated_pawn[PHASE.MG];
                     v[PHASE.EG] -= isolated_pawn[PHASE.EG];
@@ -1884,32 +2300,605 @@ let Raccoon = function(fen_pos){
         }
         let white = pawns(COLORS.WHITE);
         let black = pawns(COLORS.BLACK);
-        console.log('mg');
-        console.log(white[0]);
-        console.log(black[0]);
-        console.log('eg');
-        console.log(white[1]);
-        console.log(black[1]);
         rlt.middlegame += (white[PHASE.MG] - black[PHASE.MG]);
         rlt.endgame += (white[PHASE.EG] - black[PHASE.EG]);
-        return (pawns(COLORS.WHITE) - pawns(COLORS.BLACK));
     }
+    function rank(color, sq) {
+        let r = ranks_board[sq];
+        return (color === COLORS.WHITE)? r + 1: 8 - r;
+    }
+    function outpost_square(color, sq) {
+        if (rank(color, sq) < 4 || rank(color, sq) > 6) return 0;
+        if (supported(color, sq)){
+            let f = files_board[sq];
+            if ((f === FILES.A_FILE || !board.pawns[color^1].files[f-1]) &&
+                (f === FILES.H_FILE || !board.pawns[color^1].files[f+1])) return 1;
+            let dir = (color===COLORS.WHITE)? 10: -10;
+            let tmp_sq = sq + dir;
+            let opp_pawn  = (color^1)*6 + 1;
+            while(SQUARE_ON_BOARD(tmp_sq)){
+                if(SQUARE_ON_BOARD(tmp_sq - 1) && board.pieces[tmp_sq - 1] === opp_pawn) return 0;
+                if(SQUARE_ON_BOARD(tmp_sq + 1) && board.pieces[tmp_sq + 1] === opp_pawn) return 0;
+                tmp_sq += dir;
+            }
+            return 1;
+        }
+        return 0;
+    }
+    function outpost(color, sq) {
+        if (!outpost_square(color, sq)) return 0;
+        return is_knight[board.pieces[sq]] || is_bishop[board.pieces[sq]];
+    }
+
+    //-- TODO  not very in efficient
+    function reachable_outpost(color, kn_bi_sq){
+        if (!is_knight[board.pieces[kn_bi_sq]] && !is_bishop[board.pieces[kn_bi_sq]]){
+            return 0;
+        }
+        if ((color === COLORS.WHITE) ^ is_white_piece[board.pieces[kn_bi_sq]]) return 0;
+        let f, r, sq, pce;
+        for(r = RANKS.THIRD_RANK; r <= RANKS.SIXTH_RANK; r++){
+            for(f = FILES.A_FILE; f <= FILES.H_FILE; f++){
+                sq = FILE_RANK_TO_SQUARE(f,r);
+                pce = board.pieces[sq];
+                if(outpost_square(color, sq) && (((color === COLORS.WHITE) ^ is_white_piece[pce]) || pce === PIECES.EMPTY)){
+                    if((is_knight[board.pieces[kn_bi_sq]] && knight_attack(color, sq, kn_bi_sq)) || bishop_xray_attack(color, sq, kn_bi_sq)){
+                        return supported(color, sq)? 2: 1;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+    function blockers_for_king(color, sq) {
+        if (pinned_direction(color^1, sq)) return 1;
+        return 0;
+    }
+    function mobility_area(color, sq) {
+        let k = (color === COLORS.WHITE)? PIECES.WHITEKING: PIECES.BLACKKING;
+        let q = (color === COLORS.WHITE)? PIECES.WHITEQUEEN: PIECES.BLACKQUEEN;
+        let p = (color === COLORS.WHITE)? PIECES.WHITEPAWN: PIECES.BLACKPAWN;
+        let dif = (color === COLORS.WHITE)? 10: -10;
+        let sq_pce = board.pieces[sq];
+        if(sq_pce === k || sq_pce === q) return 0;
+        if(supported(color^1, sq)) return 0;
+        if(sq_pce === p && (rank(color, sq) < 4 || board.pieces[sq + dif] !== PIECES.EMPTY)) return 0;
+        if (blockers_for_king(color^1, sq)) return 0;
+        return 1;
+    }
+
+    //-- TODO VERY INEFFICIENT
+    function mobility(color, sq) {
+        let v = 0;
+        let sq_tmp, r, f;
+        let b = board.pieces[sq];
+        if ((((color === COLORS.WHITE) ^ is_white_piece[b]) !==0) || b === PIECES.EMPTY) return 0;
+        if(!is_knight[b] && !is_bishop[b] && !is_rook_or_queen[b]) return 0;
+        for(f = FILES.A_FILE; f<= FILES.H_FILE; f++){
+            for (r = RANKS.FIRST_RANK; r <= RANKS.EIGHTH_RANK; r++){
+               sq_tmp = FILE_RANK_TO_SQUARE(f, r);
+               if (!mobility_area(color, sq_tmp)) continue;
+               if (!is_color_queen[color][board.pieces[sq_tmp]] && is_knight[b] && knight_attack(color, sq_tmp, sq)) v++;
+               if (!is_color_queen[color][board.pieces[sq_tmp]] && is_bishop[b] && bishop_xray_attack(color, sq_tmp, sq)) v++;
+               if (is_rook[b] && rook_xray_attack(color, sq_tmp, sq)) v++;
+               if (is_queen[b] && queen_attack(color, sq_tmp, sq)) v++;
+            }
+        }
+        return v;
+    }
+
+    function pieces_total(rlt) {
+        //-- bonus
+        const outpost_t = [
+            [0,32,30,60],
+            [0,10,21,42]
+        ];
+        const minor_behind_t    = [18, 3];
+        const bishop_pawn_t     = [3, 7];
+        const rook_queen_file_t = [7, 6];
+        const rook_on_file_t    = [
+            [0,21,47],
+            [0,4,25]
+        ];
+        const trapped_rook_t         = [52, 10];
+        const weak_queen_t           = [49, 15];
+        const king_protection_t      = [7, 8];
+        const long_diagonal_bishop_t = 45;
+
+        let queen_files = 0;
+
+        function outpost_total(color, sq) {
+            let pce = board.pieces[sq];
+            if (!is_knight[pce] && !is_bishop[pce]) return 0;
+            let reachable = 0;
+            if (!outpost(color, sq)) {
+                if (!is_knight[pce]) return 0;
+                reachable = reachable_outpost(color, sq);
+                if (!reachable) return 0;
+                return 1;
+            }
+            if (get_color_piece[pce] === color) return (is_knight[pce])? 3 : 2;
+            return 0;
+        }
+        function minor_behind_pawn(color, kn_bi_sq) {
+            let pce = board.pieces[kn_bi_sq];
+            if (!is_knight[pce] && !is_bishop[pce]) return 0;
+            if (color === COLORS.WHITE) return (is_white_piece[pce] && SQUARE_ON_BOARD(kn_bi_sq + 10) && is_pawn[board.pieces[kn_bi_sq + 10]]);
+            return (!is_white_piece[pce] &&  SQUARE_ON_BOARD(kn_bi_sq - 10) && is_pawn[board.pieces[kn_bi_sq - 10]]);
+        }
+        function bishop_pawns(color, sq) {
+            return pawns_squares[color][square_color(sq)]*(1 + central_blocked_pawns[color]);
+        }
+        function rook_on_file(color, sq) {
+            if(!is_color_rook[color][board.pieces[sq]]) return 0;
+            let file = files_board[sq];
+            if(board.pawns[color].files[file] !==0) return 0;
+            if(board.pawns[COLORS.BOTH].files[file] ===0) return 2; //-- opened file
+            return 1; //-- semi open
+        }
+
+        function trapped_rook(color, sq) {
+            if(!is_color_rook[color][board.pieces[sq]]) return 0;
+            if (rook_on_file(color, sq)) return 0;
+            if (mobility(color, sq)> 3) return 0;
+            let k = (color === COLORS.WHITE)? PIECES.WHITEKING: PIECES.BLACKKING;
+            let s = board.piece_list[PIECE_INDEX(k, 0)];
+            return ((files_board[s] < 4) === (files_board[sq] < files_board[s]));
+        }
+
+        function weak_queen(color, sq) {
+            if(!is_color_queen[color][board.pieces[sq]]) return 0;
+
+            let sq_pce, i, dir_tmp;
+            let o_r = (color===COLORS.WHITE)? PIECES.BLACKROOK: PIECES.WHITEROOK;
+            let o_b = (color===COLORS.WHITE)? PIECES.BLACKBISHOP: PIECES.WHITEBISHOP;
+            
+            function relative_pin_or_discover(from, to, dir) {
+                let seen = false;
+                while(SQUARE_ON_BOARD(from) && from !== to){
+                    if(board.pieces[from] === PIECES.EMPTY){
+                        from +=dir;
+                        continue;
+                    }
+                    else{
+                        if(!seen){
+                            from +=dir;
+                            seen = true;
+                        }
+                        else return 0;
+                    }
+                }
+                return (seen && from === to);
+            }
+
+            //-- bishop pin or discovery
+            for(i = 0; i < board.number_pieces[o_b]; i++) {
+                sq_pce = board.piece_list[PIECE_INDEX(o_b, i)];
+                let dir = get_direction(sq_pce, sq);
+                if (dir >= DIR.UP_LEFT && dir < DIR.SAME) {
+                    dir_tmp = [9, 11, -11, -9][dir - 4];
+                    if (same_diagonal(sq, sq_pce)){
+                        if (relative_pin_or_discover(sq_pce+dir_tmp, sq, dir_tmp)) return 1;
+                    }
+                }
+            }
+
+            //-- rook
+            for(i = 0; i < board.number_pieces[o_r]; i++) {
+                sq_pce = board.piece_list[PIECE_INDEX(o_r, i)];
+                let dir = get_direction(sq_pce, sq);
+                if (dir < DIR.UP_LEFT) {
+                    dir_tmp  = [10, -10, -1, 1][dir];
+                    if (relative_pin_or_discover(sq_pce+dir_tmp, sq, dir_tmp)) return 1;
+                }
+            }
+            return 0;
+        }
+        function king_protector(color, sq) {
+            if(!is_color_bishop[color][board.pieces[sq]] && !is_color_knight[color][board.pieces[sq]]) return 0;
+            let k = (color === COLORS.WHITE)? PIECES.WHITEKING: PIECES.BLACKKING;
+            let k_s = board.piece_list[PIECE_INDEX(k, 0)];
+            let f_df = Math.abs(files_board[sq] - files_board[k_s]);
+            let r_df = Math.abs(ranks_board[sq] - ranks_board[k_s]);
+            return Math.max(f_df, r_df);
+        }
+        function long_diagonal_bishop(color, sq) {
+            if(!is_color_bishop[color][board.pieces[sq]]) return 0;
+            if((files_board[sq] - ranks_board[sq] !==0 ) && (files_board[sq] - (7 - ranks_board[sq]) !==0)) return 0;
+            if (Math.min(files_board[sq], 7 - files_board[sq]) > 2) return 0;// center-squares
+            let c_sq = (square_color(sq) === COLORS.BLACK)? SQUARES.E5:SQUARES.E4;
+            let dir = get_direction(sq, c_sq);
+            let dir_tmp = [9, 11, -11, -9][dir - 4];
+            let to_sq;
+            switch (dir) {
+                case DIR.UP_RIGHT:
+                    to_sq = SQUARES.E5;
+                    break;
+                case DIR.UP_LEFT:
+                    to_sq = SQUARES.D5;
+                    break;
+                case DIR.DOWN_LEFT:
+                    to_sq = SQUARES.D4;
+                    break;
+                case DIR.DOWN_RIGHT:
+                    to_sq = SQUARES.E4;
+                    break;
+                default:
+                    return 0;
+            }
+            let tmp_sq = sq + dir_tmp;
+            while(tmp_sq !== to_sq) {
+                if(board.pieces[tmp_sq] !== PIECES.EMPTY && !is_big_piece[board.pieces[tmp_sq]]) return 0;
+                tmp_sq += dir_tmp;
+            }
+            return 1;
+        }
+
+        function queen(color) {
+            let sq, pce, i;
+            let v = [0,0];
+            //-- queen
+            pce = (color === COLORS.WHITE)? PIECES.WHITEQUEEN: PIECES.BLACKQUEEN;
+            for(i = 0; i < board.number_pieces[pce]; i++) {
+                sq = board.piece_list[PIECE_INDEX(pce, i)];
+                queen_files |= (1 << files_board[sq]);
+                //-- psqt
+                /*if(color === COLORS.WHITE){
+                    v[PHASE.EG] += queen_psqt[PHASE.EG][square_64(sq)];
+                    v[PHASE.MG] += queen_psqt[PHASE.MG][square_64(sq)];
+                }
+                else{
+                    v[PHASE.EG] += queen_psqt[PHASE.EG][flip[square_64(sq)]];
+                    v[PHASE.MG] += queen_psqt[PHASE.MG][flip[square_64(sq)]];
+                }
+
+
+
+                //-- weak queen
+                let wq = weak_queen(color, sq);
+                v[PHASE.EG] -= weak_queen_t[PHASE.EG]*wq;
+                v[PHASE.MG] -= weak_queen_t[PHASE.MG]*wq;
+
+
+                //-- mobility
+                let mb = mobility(color, sq);
+                v[PHASE.EG] += mobility_bonus[PHASE.EG][3][mb];
+                v[PHASE.MG] += mobility_bonus[PHASE.MG][3][mb];
+
+                 */
+            }
+
+            return v;
+
+        }
+
+
+        function pieces(color){
+            let sq, pce, i;
+            let v = [0,0];
+            //-- knight
+            pce = (color === COLORS.WHITE)? PIECES.WHITEKNIGHT: PIECES.BLACKKNIGHT;
+            for(i = 0; i < board.number_pieces[pce]; i++) {
+                sq = board.piece_list[PIECE_INDEX(pce, i)];
+                //-- psqt
+                /*if(color === COLORS.WHITE){
+                    v[PHASE.EG] += knight_psqt[PHASE.EG][square_64(sq)];
+                    v[PHASE.MG] += knight_psqt[PHASE.MG][square_64(sq)];
+                }
+                else{
+                    v[PHASE.EG] += knight_psqt[PHASE.EG][flip[square_64(sq)]];
+                    v[PHASE.MG] += knight_psqt[PHASE.MG][flip[square_64(sq)]];
+                }
+
+
+
+
+                //-- outpost
+                let opt = outpost_total(color, sq);
+                v[PHASE.EG] += outpost_t[PHASE.EG][opt];
+                v[PHASE.MG] += outpost_t[PHASE.MG][opt];
+
+
+
+
+                //--minor behind
+                let mbp = minor_behind_pawn(color, sq);
+                v[PHASE.EG] += minor_behind_t[PHASE.EG]*mbp;
+                v[PHASE.MG] += minor_behind_t[PHASE.MG]*mbp;
+
+                 //-- king protector
+                let kp = king_protector(color, sq);
+                v[PHASE.EG] -= king_protection_t[PHASE.EG]*kp;
+                v[PHASE.MG] -= king_protection_t[PHASE.MG]*kp;
+
+
+
+                //-- mobility
+                let mb = mobility(color, sq);
+                v[PHASE.EG] += mobility_bonus[PHASE.EG][0][mb];
+                v[PHASE.MG] += mobility_bonus[PHASE.MG][0][mb];
+                */
+
+            }
+
+            //-- bishop
+            pce = (color === COLORS.WHITE)? PIECES.WHITEBISHOP: PIECES.BLACKBISHOP;
+            for(i = 0; i < board.number_pieces[pce]; i++) {
+                sq = board.piece_list[PIECE_INDEX(pce, i)];
+                //-- psqt
+                /*if(color === COLORS.WHITE){
+                    v[PHASE.EG] += bishop_psqt[PHASE.EG][square_64(sq)];
+                    v[PHASE.MG] += bishop_psqt[PHASE.MG][square_64(sq)];
+                }
+                else{
+                    v[PHASE.EG] += bishop_psqt[PHASE.EG][flip[square_64(sq)]];
+                    v[PHASE.MG] += bishop_psqt[PHASE.MG][flip[square_64(sq)]];
+                }
+
+
+
+
+                //-- outpost
+                let opt = outpost_total(color, sq);
+                if (opt) console.log("wb"[color] + " " + opt.toString());
+                v[PHASE.EG] += outpost_t[PHASE.EG][opt];
+                v[PHASE.MG] += outpost_t[PHASE.MG][opt];
+
+
+
+                //--minor behind
+                let mbp = minor_behind_pawn(color, sq);
+                v[PHASE.EG] += minor_behind_t[PHASE.EG]*mbp;
+                v[PHASE.MG] += minor_behind_t[PHASE.MG]*mbp;
+
+
+
+                //-- bishop pawns
+                let bsp = bishop_pawns(color, sq);
+                v[PHASE.EG] -= bishop_pawn_t[PHASE.EG]*bsp;
+                v[PHASE.MG] -= bishop_pawn_t[PHASE.MG]*bsp;
+
+
+
+                //-- king protector
+                let kp = king_protector(color, sq);
+                v[PHASE.EG] -= king_protection_t[PHASE.EG]*kp;
+                v[PHASE.MG] -= king_protection_t[PHASE.MG]*kp;
+
+                //-- bishop in long diagonal
+                v[PHASE.MG] += long_diagonal_bishop_t*long_diagonal_bishop(color, sq);
+
+
+                //-- mobility
+                let mb = mobility(color, sq);
+                v[PHASE.EG] += mobility_bonus[PHASE.EG][1][mb];
+                v[PHASE.MG] += mobility_bonus[PHASE.MG][1][mb];
+
+                 */
+
+
+            }
+
+
+            //-- rook
+            pce = (color === COLORS.WHITE)? PIECES.WHITEROOK: PIECES.BLACKROOK;
+            for(i = 0; i < board.number_pieces[pce]; i++) {
+                sq = board.piece_list[PIECE_INDEX(pce, i)];
+                //-- psqt
+                /*if(color === COLORS.WHITE){
+                    v[PHASE.EG] += rook_psqt[PHASE.EG][square_64(sq)];
+                    v[PHASE.MG] += rook_psqt[PHASE.MG][square_64(sq)];
+                }
+                else{
+                    v[PHASE.EG] += rook_psqt[PHASE.EG][flip[square_64(sq)]];
+                    v[PHASE.MG] += rook_psqt[PHASE.MG][flip[square_64(sq)]];
+                }
+
+
+
+
+                //--  rook on queen file
+                let csb = (queen_files & (1 << files_board[sq]))? 1: 0;
+                v[PHASE.EG] += (rook_queen_file_t[PHASE.EG] * csb);
+                v[PHASE.MG] += (rook_queen_file_t[PHASE.MG] * csb);
+
+                //-- rook on open or semi open file
+                let ind = rook_on_file(color, sq);
+                v[PHASE.EG] += rook_on_file_t[PHASE.EG][ind];
+                v[PHASE.MG] += rook_on_file_t[PHASE.MG][ind];
+
+                //-- trapped rook
+                let tr = trapped_rook(color, sq);
+                let c;
+                if((color === COLORS.WHITE)){
+                    c = ((board.castling_right & CASTLING.WHITE_CASTLE_OOO) || (board.castling_right & CASTLING.WHITE_CASTLE_OO))? 1: 2;
+                }
+                else{
+                    c = ((board.castling_right & CASTLING.BLACK_CASTLE_OO) || (board.castling_right & CASTLING.BLACK_CASTLE_OOO))? 1: 2;
+                }
+                v[PHASE.EG] -= tr*trapped_rook_t[PHASE.EG]*c;
+                v[PHASE.MG] -= tr*trapped_rook_t[PHASE.MG]*c;
+
+
+                //-- mobility
+                let mb = mobility(color, sq);
+                v[PHASE.EG] += mobility_bonus[PHASE.EG][2][mb];
+                v[PHASE.MG] += mobility_bonus[PHASE.MG][2][mb];
+
+                 */
+            }
+
+
+
+            return v;
+        }
+        queen_files = 0;
+        let white_q = queen(COLORS.WHITE);
+        let black_q = queen(COLORS.BLACK);
+        let white_p = pieces(COLORS.WHITE);
+        let black_p = pieces(COLORS.BLACK);
+
+        let white = [
+            white_q[PHASE.MG] + white_p[PHASE.MG],
+            white_q[PHASE.EG] + white_p[PHASE.EG],
+        ];
+
+        let black = [
+            black_q[PHASE.MG] + black_p[PHASE.MG],
+            black_q[PHASE.EG] + black_p[PHASE.EG],
+        ];
+
+        console.log("white mg: " +  white[PHASE.MG].toString());
+        console.log("white eg: " +  white[PHASE.EG].toString());
+        console.log("");
+        console.log("black mg: " +  black[PHASE.MG].toString());
+        console.log("black eg: " +  black[PHASE.EG].toString());
+        rlt.middlegame += (white[PHASE.MG] - black[PHASE.MG]);
+        rlt.endgame += (white[PHASE.EG] - black[PHASE.EG]);
+    }
+
+    function threats_mg(pos) {
+        var v = 0;
+        v += 69 * hanging(pos);
+        v += king_threat(pos) > 0 ? 24 : 0;
+        v += 48 * pawn_push_threat(pos);
+        v += 173 * threat_safe_pawn(pos);
+        v += 59 * slider_on_queen(pos);
+        v += 16 * knight_on_queen(pos);
+        v += 7 * restricted(pos);
+        for (var x = 0; x < 8; x++) {
+            for (var y = 0; y < 8; y++) {
+                var s = {x:x,y:y};
+                v += [0,6,59,79,90,79,0][minor_threat(pos, s)];
+                v += [0,3,38,38,0,51,0][rook_threat(pos, s)];
+            }
+        }
+        return v;
+    }
+    function weak_enemies(color, sq){
+        if(board.pieces[sq] === PIECES.EMPTY) return 0;
+        if(!((color === COLORS.WHITE) ^ is_white_piece[board.pieces[sq]])) return 0;
+        if(supported(color^1, sq)) return 0;
+        if (!attack(color, sq)) return 0;
+        if (attack(color, sq) <= 1 && attack(color^1, sq) > 1) return 0;
+        return 1;
+    }
+    function hanging(color, sq) {
+        if (!weak_enemies(color, sq)) return 0;
+        if (is_color_pawn[color^1][board.pieces[sq]] && attack(color, sq) > 1) return 1;
+        if (!attack(color^1, sq)) return 1;
+        return 0;
+    }
+    function king_threat(color, sq) {
+        if(!((color === COLORS.WHITE) ^ is_white_piece[board.pieces[sq]])) return 0;
+        if (!weak_enemies(color, sq)) return 0;
+        if (!king_attack(color, sq)) return 0;
+        return 1;
+    }
+    function pawn_push_threat(pos, square) {
+        if (square == null) return sum(pos, pawn_push_threat);
+        if ("pnbrqk".indexOf(board(pos, square.x, square.y)) < 0) return 0;
+        for (var ix = -1; ix <= 1; ix += 2) {
+            if (board(pos, square.x + ix, square.y + 2) == "P"
+                && board(pos, square.x + ix, square.y + 1) == "-"
+                && board(pos, square.x + ix - 1, square.y) != "p"
+                && board(pos, square.x + ix + 1, square.y) != "p"
+                && (attack(pos, {x:square.x+ix,y:square.y+1})
+                    || !attack(colorflip(pos),{x:square.x+ix,y:6-square.y}))
+            ) return 1;
+
+            if (square.y == 3
+                && board(pos, square.x + ix, square.y + 3) == "P"
+                && board(pos, square.x + ix, square.y + 2) == "-"
+                && board(pos, square.x + ix, square.y + 1) == "-"
+                && board(pos, square.x + ix - 1, square.y) != "p"
+                && board(pos, square.x + ix + 1, square.y) != "p"
+                && (attack(pos, {x:square.x+ix,y:square.y+1})
+                    || !attack(colorflip(pos),{x:square.x+ix,y:6-square.y}))
+            ) return 1;
+        }
+        return 0;
+    }
+    function pawn_push_threat(color, sq) {
+        if(!((color === COLORS.WHITE) ^ is_white_piece[board.pieces[sq]])) return 0;
+
+        let dif = (color === COLORS.WHITE)? 20: -20;
+        if()
+
+
+    }
+    function threat_safe_pawn() {
+
+    }
+    function slider_on_queen() {
+
+    }
+    function knight_on_queen() {
+
+    }
+    function restricted() {
+
+    }
+    function minor_threat() {
+
+    }
+    function rook_threat() {
+
+    }
+
+    function threats_total(rlt) {
+        //-- bonus
+        const hanging_t          = [69, 36];
+        const king_threat_t      = [24, 89];
+        const pawn_push_threat_t = [48, 39];
+        const threat_safe_pawn_t = [173,94 ];
+        const slider_on_queen_t  = [59, 18];
+        const knight_on_queen_t  = [16, 12];
+        const restricted_t       = [7, 7];
+        const minor_threat_t     = [
+            [0,6,59,79,90,79,0],
+            [0,32,41,56,119,161,0]
+        ];
+        const rook_threat_t =[
+            [0,3,38,38,0,51,0],
+            [0,44,71,61,38,38,0]
+        ];
+        function threats(color){
+
+        }
+
+    }
+
 
     //-- TODO pull pawn into pawns()
     function game_evaluation(){
         let rlt = new eval_t();
         let pce, sq;
         //-- piece value
-        rlt.middlegame = board.material_mg[COLORS.WHITE] - board.material_mg[COLORS.BLACK];
-        rlt.endgame = board.material_eg[COLORS.WHITE] - board.material_eg[COLORS.BLACK];
+        //rlt.middlegame = board.material_mg[COLORS.WHITE] - board.material_mg[COLORS.BLACK];
+        //rlt.endgame = board.material_eg[COLORS.WHITE] - board.material_eg[COLORS.BLACK];
         //-- psqt
-        psqt_score(rlt);
+        //--psqt_score(rlt);
         //-- imbalance
-        imbalance_total(rlt);
+        //imbalance_total(rlt);
         pawns_total(rlt);
+        let v = [0, 0];
+
+        for(let i = 0; i < 120; i++) {
+            if (SQUARE_ON_BOARD(i)) {
+                let t = king_threat(COLORS.WHITE, i);
+                let r = king_threat(COLORS.BLACK, i);
+                if (t) console.log("white " + square_to_algebraic(i) + " score: "+ t.toString());
+                if (r) console.log("black " + square_to_algebraic(i) + " score: "+ r.toString());
+                v[0] += t// ();//bishop_xray_attack(COLORS.WHITE, i);
+                v[1] += r;//bishop_xray_attack(COLORS.BLACK, i);
+            }
+        }
+        console.log("white "+ v[0].toString());
+        console.log("black "+ v[1].toString());
+        //pieces_total(rlt);
 
         /*
-        v += pawns_mg(pos) - pawns_mg(colorflip(pos));
         v += pieces_mg(pos) - pieces_mg(colorflip(pos));
         v += mobility_mg(pos) - mobility_mg(colorflip(pos));
         v += threats_mg(pos) - threats_mg(colorflip(pos));
@@ -2231,6 +3220,11 @@ let Raccoon = function(fen_pos){
         },
         mirror_board: function () {
             return mirror_board();
+        },
+        dir: function(f, t){
+            let l = ["UP","DOWN", "LEFT","RIGHT","UP_LEFT","UP_RIGHT","DOWN_LEFT","DOWN_RIGHT", "SAME"]
+            console.log(square_to_algebraic(f)+ " - " + square_to_algebraic(t));
+           return l[get_direction(f, t)];
         },
         print: function () {
             for(let i =0; i<3; i++){
