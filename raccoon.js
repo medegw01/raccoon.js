@@ -606,7 +606,7 @@ let Raccoon = function(fen_pos){
         return ascii_t;
     }
 
-    function in_check() {
+    function in_check() {//TODO
         return (is_square_attacked(board.kings[board.turn], (board.turn)^1))
     }
     function in_checkmate() {
@@ -625,6 +625,7 @@ let Raccoon = function(fen_pos){
         }
         return false;
     }
+
 
     /*****************************************************************************
      * HASH
@@ -1259,6 +1260,19 @@ let Raccoon = function(fen_pos){
             p = nonslider[i++];
         }
         return moves;
+    }
+
+    function legal_moves(capture = false) {
+        let moves_t_move = generate_moves(capture);
+        let rlt = [];
+        for(let i  = 0; i <moves_t_move.length; i++){
+            let tmp_move = moves_t_move[i].move;
+            if (make_move(tmp_move)) {
+                rlt.push(tmp_move);
+                take_move();
+            }
+        }
+        return rlt;
     }
 
     /*****************************************************************************
@@ -3062,9 +3076,10 @@ let Raccoon = function(fen_pos){
                 if ('verbose' in options) verbose = options.verbose;
                 if ('capture' in options) capture = options.capture;
             }
-            let moves_t_move = generate_moves(capture);
+            let moves_t_move = legal_moves();
             for(let i  = 0; i <moves_t_move.length; i++){
-                let parsed_move = parse_move(moves_t_move[i].move, verbose);
+                let tmp_move = moves_t_move[i].move;
+                let parsed_move = parse_move(tmp_move, verbose);
                 if((!verbose && (parsed_move !== "")) || (verbose && (parsed_move !==null))){
                     rlt.push(parsed_move);
                 }
@@ -3138,6 +3153,11 @@ let Raccoon = function(fen_pos){
         },
         in_checkmate: function () {
           return in_checkmate();
+        },
+        in_stalemate: function(){
+            let check = in_check();
+            let moves = legal_moves();
+            return !check && moves.length == 0;
         },
         perft: function (depth) {
             return perft(depth);
