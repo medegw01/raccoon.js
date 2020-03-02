@@ -18,7 +18,7 @@ describe("Perft", function() {
         game.load(perft.fen);
 
         it(perft.fen, function() {
-            let nodes = game.perft_summary(perft.depth);
+            let nodes = game.perft(perft.depth);
             expect(nodes).toBe(perft.nodes);
         });
 

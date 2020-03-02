@@ -3139,6 +3139,9 @@ let Raccoon = function(fen_pos){
         in_checkmate: function () {
           return in_checkmate();
         },
+        perft: function (depth) {
+            return perft(depth);
+        },
         perft_summary: function (depth) {
             return perft_summary(depth);
         },
