@@ -26,40 +26,69 @@ describe("Perft", function() {
 });
 
 describe("Checkmate", function() {
-
-    let game = new Raccoon();
     let checkmates = [
-        '8/5r2/4K1q1/4p3/3k4/8/8/8 w - - 0 7',
-        '4r2r/p6p/1pnN2p1/kQp5/3pPq2/3P4/PPP3PP/R5K1 b - - 0 2',
-        'r3k2r/ppp2p1p/2n1p1p1/8/2B2P1q/2NPb1n1/PP4PP/R2Q3K w kq - 0 8',
-        '8/6R1/pp1r3p/6p1/P3R1Pk/1P4P1/7K/8 b - - 0 4'
+        {fen: '1R6/8/8/8/8/8/7R/k6K b - - 0 1', result: false},
+        {fen: '5bnr/4p1pq/4Qpkr/7p/2P4P/8/PP1PPPP1/RNB1KBNR b KQ - 0 10', result: false},
+        {fen: '8/5r2/4K1q1/4p3/3k4/8/8/8 w - - 0 7', result: true},
+        {fen: '4r2r/p6p/1pnN2p1/kQp5/3pPq2/3P4/PPP3PP/R5K1 b - - 0 2', result: true},
+        {fen: 'r3k2r/ppp2p1p/2n1p1p1/8/2B2P1q/2NPb1n1/PP4PP/R2Q3K w kq - 0 8', result: true},
+        {fen: '8/6R1/pp1r3p/6p1/P3R1Pk/1P4P1/7K/8 b - - 0 4', result: true},
     ];
-
     checkmates.forEach(function(checkmate) {
-        game.load(checkmate);
-        it(checkmate, function() {
-            expect(game.in_checkmate()).toBe(true);
+        let game = new Raccoon(checkmate.fen);
+        it(checkmate.fen, function() {
+            expect(game.in_checkmate()).toBe(checkmate.result);
         });
     });
 
 });
-
-
 
 describe("Stalemate", function() {
-    let game = new Raccoon();
     let stalemates = [
-        '1R6/8/8/8/8/8/7R/k6K b - - 0 1',
-        '8/8/5k2/p4p1p/P4K1P/1r6/8/8 w - - 0 2',
+        {fen: '2R5/8/8/8/3B4/8/7R/k6K b - - 0 1', result: false},
+        {fen: '8/8/5k2/p4p1p/P4K1P/4r3/8/8 w - - 0 2', result: false},
+        {fen: '1R6/8/8/8/8/8/7R/k6K b - - 0 1', result: true},
+        {fen: '5bnr/4p1pq/4Qpkr/7p/2P4P/8/PP1PPPP1/RNB1KBNR b KQ - 0 10', result: true},
     ];
-
     stalemates.forEach(function(stalemate) {
-        game.load(stalemate);
-        it(stalemate, function() {
-            expect(game.in_stalemate()).toBe(true)
+        let game = new Raccoon(stalemate.fen);
+        it(stalemate.fen, function() {
+            expect(game.in_stalemate()).toBe(stalemate.result)
+        });
+    });
+});
+
+describe("FEN", function() {
+    let positions = [
+        {fen: '8/8/8/8/8/8/8/8 w - - 0 1', result: true},
+        {fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', result: true},
+        {fen: '1nbqkbn1/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/1NBQKBN1 b - - 1 2', result: true},
+        {fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1', result: true},
+
+        /* incomplete FEN string */
+        {fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN w KQkq - 0 1', result: false},
+
+        /* Illegal character 9*/
+        {fen: 'rnbqkbnr/pppppppp/9/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', result: false},
+
+        /* Illegal character X */
+        {fen: '1nbqkbn1/pppp1ppX/8/4p3/4P3/8/PPPP1PPP/1NBQKBN1 b - - 1 2', result: false},
+
+        /* Half move cannot be a negative integer */
+        {fen: '1nbqkbn1/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/1NBQKBN1 b - - -1 2', result: false},
+
+        /* Full move must be greater than 0 */
+        {fen: '1nbqkbn1/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/1NBQKBN1 b - - 10 0', result: false},
+    ];
+    positions.forEach(function(position) {
+        it(position.fen + ' (' + position.should_pass + ')', function() {
+            let game = new Raccoon();
+            game.load(position.fen);
+            expect(game.fen() === position.fen === position.result).toBe(true);
         });
 
     });
 
 });
+
 

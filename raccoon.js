@@ -80,6 +80,7 @@ let Raccoon = function(fen_pos){
         half_moves: 0,
         castling_right: 0,
         ply: 0,
+        full_moves: 0,
         history_ply: 0,
         current_position_key: 0,
 
@@ -400,6 +401,7 @@ let Raccoon = function(fen_pos){
         board.enpassant= SQUARES.OFF_SQUARE;
         board.half_moves = 0;
         board.ply = 0;
+        board.full_moves = 1;
         board.history_ply = 0;
         board.castling_right =0;
         board.current_position_key = 0;
@@ -469,7 +471,7 @@ let Raccoon = function(fen_pos){
         }
 
         if (!(fen[i] === 'w' || fen[i] === 'b')){
-            return {value: false, error: 'side to move is invalid. It should be w or b'};
+            return {value: false, error: 'Side to move is invalid. It should be w or b'};
         }
         board.turn = (fen[i] === 'w')? COLORS.WHITE : COLORS.BLACK;
         i += 2;
@@ -494,7 +496,7 @@ let Raccoon = function(fen_pos){
             rank = fen.charCodeAt(++i) - '1'.charCodeAt(0);
 
             if (!(file >= FILES.A_FILE && file <= FILES.H_FILE) || !(rank >= RANKS.FIRST_RANK && rank <= RANKS.EIGHTH_RANK)){
-                return {value: false, error: "invalid en-passant square"};
+                return {value: false, error: "Invalid en-passant square"};
             }
             board.enpassant = FILE_RANK_TO_SQUARE(file, rank);
         }
@@ -506,7 +508,7 @@ let Raccoon = function(fen_pos){
         }
         i++;
         let half_move = parseInt(half);
-        if (half_move < 0) return {value: false, error: "half move cannot be a negative integer"};
+        if (half_move < 0) return {value: false, error: "Half move cannot be a negative integer"};
 
         let full ="";
         while(i < n) {
@@ -514,12 +516,13 @@ let Raccoon = function(fen_pos){
         }
 
         let full_move = parseInt(full);
-        if(full_move < 1 ) return {value: false, error: 'full move must be greater than 0'};
+        if(full_move < 1 ) return {value: false, error: 'Full move must be greater than 0'};
 
 
         board.half_moves = half_move;
-        board.history_ply = full_move;
-        board.ply = full_move;
+        board.history_ply = 0;
+        board.ply = 0;
+        board.full_moves = full_move;
         board.current_position_key = 0;
         board.current_position_key = get_hash_key();
         update_list_material();
@@ -575,7 +578,7 @@ let Raccoon = function(fen_pos){
         fen_str += ' ';
         fen_str += board.half_moves.toString();
         fen_str +=' ';
-        fen_str += board.history_ply.toString();
+        fen_str += board.full_moves.toString();
 
         return fen_str;
     }
@@ -624,6 +627,11 @@ let Raccoon = function(fen_pos){
             return (legal === 0);
         }
         return false;
+    }
+    function in_stalemate() {
+        let check = in_check();
+        let moves = legal_moves();
+        return !check && moves.length == 0;
     }
 
 
@@ -1604,6 +1612,7 @@ let Raccoon = function(fen_pos){
         if(board.history_ply === 0) return null;
         board.history_ply--;
         board.ply--;
+        board.full_moves -= (board.turn === COLORS.WHITE)? 1: 0;
 
         let move = board.history[board.history_ply].move;
         let from = FROM_SQUARE(move);
@@ -1721,6 +1730,7 @@ let Raccoon = function(fen_pos){
 
         board.history_ply++;
         board.ply++;
+        board.full_moves += (board.turn === COLORS.BLACK)? 1: 0;
 
         if(is_pawn[board.pieces[from]]) {
             board.half_moves = 0;
@@ -3155,9 +3165,10 @@ let Raccoon = function(fen_pos){
           return in_checkmate();
         },
         in_stalemate: function(){
-            let check = in_check();
-            let moves = legal_moves();
-            return !check && moves.length == 0;
+            return in_stalemate();
+        },
+        game_over: function(){
+            return in_checkmate() || in_stalemate();
         },
         perft: function (depth) {
             return perft(depth);
