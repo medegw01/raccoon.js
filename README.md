@@ -2,8 +2,8 @@
 
 [![Build Status](https://travis-ci.org/medegw01/raccoon.js.svg?branch=master)](https://travis-ci.org/medegw01/raccoon.js)
 
-raccoon.js is a Javascript chess library that is used for chess move generation/validation, position evaluation,
-move search, piece placement/movement, and check/checkmate/stalemate detection.
+raccoon.js is a Javascript chess library that is used for chess position evaluation; best move search; move generation 
+or validation; piece placement or movement; check, checkmate, stalemate, and insufficient material detection. 
 
 raccoon.js has been extensively tested in node.js and most modern browsers.
 
@@ -118,5 +118,113 @@ raccoon.game_over();
 // checkmate
 raccoon.load('r3k2r/ppp2p1p/2n1p1p1/8/2B2P1q/2NPb1n1/PP4PP/R2Q3K w kq - 0 8')
 raccoon.game_over();
+// => true
+```
+### .get(square)
+
+Returns the piece on the square:
+
+```js
+let raccoon = new Raccoon();
+raccoon.clear();
+raccoon.put({ type: 'p', color: 'b' }, 'a5'); // put a black pawn on a5
+
+raccoon.get('a5');
+// => { type: 'p', color: 'b' },
+raccoon.get('a6');
+// => null
+```
+
+### .history([ options ])
+
+Returns a list containing the moves of the current game in SAN. Options is an optional
+parameter which may contain a 'verbose' flag~~~~. See .moves() for a description of the
+verbose move fields.
+
+```js
+let raccoon = new Raccoon();
+raccoon.move('e4');
+raccoon.move('e5');
+raccoon.move('f4');
+raccoon.move('exf4');
+
+raccoon.history();
+// => ['e4', 'e5', 'f4', 'exf4']
+
+raccoon.history({ verbose: true });
+// => [{ color: 'w', from: 'e2', to: 'e4', flags: 'b', piece: 'p', san: 'e4' },
+//     { color: 'b', from: 'e7', to: 'e5', flags: 'b', piece: 'p', san: 'e5' },
+//     { color: 'w', from: 'f2', to: 'f4', flags: 'b', piece: 'p', san: 'f4' },
+//     { color: 'b', from: 'e5', to: 'f4', flags: 'c', piece: 'p', captured: 'p', san: 'exf4' }]
+```
+
+### .in_check()
+
+Returns true or false if the side to move is in check.
+
+```js
+let raccoon = new Raccoon(
+    'rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3'
+);
+raccoon.in_check();
+// -> true
+```
+
+### .in_checkmate()
+
+Returns true or false if the side to move has been checkmated.
+
+```js
+let raccoon = new Raccoon(
+    'rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3'
+);
+raccoon.in_checkmate();
+// => true
+```
+
+### .in_draw()
+
+Returns true or false if the game is drawn (50-move rule or insufficient material).
+
+```js
+let raccoon = new Raccoon('4k3/4P3/4K3/8/8/8/8/8 b - - 0 78');
+raccoon.in_draw();
+// => true
+```
+
+### .in_stalemate()
+
+Returns true or false if the side to move has been stalemated.
+
+```js
+let raccoon = new Raccoon('4k3/4P3/4K3/8/8/8/8/8 b - - 0 78');
+raccoon.in_stalemate();
+// => true
+```
+
+### .in_threefold_repetition()
+
+Returns true or false if the current board position has occurred three or more
+times.
+
+```js
+let raccoon = new Raccoon('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+// rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq occurs 1st time
+raccoon.in_threefold_repetition();
+// => false
+raccoon.move('Nf3');
+raccoon.move('Nf6');
+raccoon.move('Ng1');
+raccoon.move('Ng8');
+// rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq occurs 2nd time
+raccoon.in_threefold_repetition();
+// => false
+
+raccoon.move('Nf3');
+raccoon.move('Nf6');
+raccoon.move('Ng1');
+raccoon.move('Ng8');
+// rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq occurs 3rd time
+raccoon.in_threefold_repetition();
 // => true
 ```
