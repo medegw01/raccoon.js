@@ -138,7 +138,7 @@ raccoon.get('a6');
 ### .history([ options ])
 
 Returns a list containing the moves of the current game in SAN. Options is an optional
-parameter which may contain a 'verbose' flag~~~~. See .moves() for a description of the
+parameter which may contain a 'verbose' flag. See .moves() for a description of the
 verbose move fields.
 
 ```js
@@ -167,7 +167,7 @@ let raccoon = new Raccoon(
     'rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3'
 );
 raccoon.in_check();
-// -> true
+// => true
 ```
 
 ### .in_checkmate()
