@@ -1,3 +1,4 @@
+"use strict";
 /*
     Raccoon, analyzes chess or chess variant positions, and generates a move or list of moves that it regards as strongest
     Copyright (C) 2020  Michael Oghenevhede Edegware  (michael.edegware@gmail.com)
@@ -15,7 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-let Raccoon = function(fen_pos){
+let Raccoon = function(game_option){
     /*****************************************************************************
      * Board constants
      ****************************************************************************/
@@ -27,6 +28,9 @@ let Raccoon = function(fen_pos){
     const MAX_MOVES_POSITION  = 256;
     const BOARD_SQUARE_NUM    = 120;
     const MAX_DEPTH           = 64;
+    if (typeof require !== 'undefined'){
+        const fs = require('fs');
+    }
 
     const PIECES  = {
         EMPTY: 0,
@@ -109,6 +113,8 @@ let Raccoon = function(fen_pos){
     let square64_to_square120 = new Array(64);
     let square120_to_square64 = new Array(BOARD_SQUARE_NUM);
 
+    let file_name = "";
+
     const get_value_piece=[//-- get_value_piece[PHASE][PIECES]
         [0, 128, 825, 781, 1276, 2538, 0, 128, 825, 781, 1276, 2538,0],
         [0, 213, 915, 854, 1380, 1380, 0, 213, 915, 854, 1380, 1380, 0]
@@ -122,10 +128,10 @@ let Raccoon = function(fen_pos){
     ];
     const get_color_piece = [COLORS.BOTH, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK];
 
-    const is_big_piece    = [false, false, true, true, true, true, true, false, true, true, true, true, true];
-    const is_major_piece  = [false, false, false, false, true, true, true, false, false, false, true, true, true];
-    const is_minor_piece  = [false, false, true, true, false, false, false, false, true, true, false, false, false];
-    const is_pawn         = [false, true, false, false, false, false, false, true, false, false, false, false, false];
+    const is_big_piece       = [false, false, true, true, true, true, true, false, true, true, true, true, true];
+    const is_major_piece     = [false, false, false, false, true, true, true, false, false, false, true, true, true];
+    const is_minor_piece     = [false, false, true, true, false, false, false, false, true, true, false, false, false];
+    const is_pawn            = [false, true, false, false, false, false, false, true, false, false, false, false, false];
     const is_knight          = [false, false, false, true, false, false, false, false, false, true, false, false, false];
     const is_bishop          = [false, false, true, false, false, false, false, false, true, false, false, false, false];
     const is_king            = [false, false, false, false, false, false, true, false, false, false, false, false, true];
@@ -134,33 +140,33 @@ let Raccoon = function(fen_pos){
     const is_rook_or_queen   = [false, false, false, false, true, true, false, false, false, false, true, true, false];
     const is_bishop_or_queen = [false, false, true, false, false, true, false, false, true, false, false, true, false];
     const is_slide_piece     = [false, false, true, false, true, true, false, false, true, false, true, true, false];
-    const is_white_piece    = [false, true, true, true, true, true, true, false, false, false, false, false, false];
+    const is_white_piece     = [false, true, true, true, true, true, true, false, false, false, false, false, false];
 
     const is_color_bishop = [
         [false, false, true, false, false, false, false, false, false, false, false, false, false],
         [false, false, false, false, false, false, false, false, true, false, false, false, false]
     ];
-    const is_color_knight =[
+    const is_color_knight = [
         [false, false, false, true, false, false, false, false, false, false, false, false, false],
         [false, false, false, false, false, false, false, false, false, true, false, false, false]
     ];
-    const is_color_rook = [
+    const is_color_rook   = [
         [false, false, false, false, true, false, false, false, false, false, false, false, false],
         [false, false, false, false, false, false, false, false, false, false, true, false, false]
     ];
-    const is_color_queen = [
+    const is_color_queen  = [
         [false, false, false, false, false, true, false, false, false, false, false, false, false],
         [false, false, false, false, false, false, false, false, false, false, false, true, false]
     ];
-    const is_color_pawn = [
+    const is_color_pawn  = [
         [false, true, false, false, false, false, false, false, false, false, false, false, false],
         [false, false, false, false, false, false, false, true, false, false, false, false, false]
     ];
 
 
-    let mvvlva_scores  = new Array(13*13);
-    let piece_to_ascii = ".PBNRQKpbnrqk";
-    let castle64_hash = [0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n];
+    let mvvlva_scores     = new Array(13*13);
+    let piece_to_ascii    = ".PBNRQKpbnrqk";
+    let castle64_hash     = [0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n];
     let castle_permission = new Array(120);
 
     /*****************************************************************************
@@ -237,8 +243,6 @@ let Raccoon = function(fen_pos){
 
         update_list_material();
     }
-
-
     /*****************************************************************************
      * HELPER FUNCTIONS
      ****************************************************************************/
@@ -317,6 +321,7 @@ let Raccoon = function(fen_pos){
         initialize_hash_key();
         initialize_files_rank_array();
         initialize_mvvlva();
+        book_init();
     }
 
     /*****************************************************************************
@@ -2048,8 +2053,103 @@ let Raccoon = function(fen_pos){
     /*****************************************************************************
      * OPENING BOOK
      ****************************************************************************/
-    //book TODO
+
+    let book_file;
+    let book_size;
+    let book_loaded = false;
+    class entry_t {
+        constructor() {
+            this.key    = BigInt(0);
+            this.move   = NO_MOVE;
+            this.weight = 0;
+            this.n      = 0;
+            this.learn  = 0;
+        }
+    }
+    function book_init(){
+        book_file     = null;
+        book_size     = 0;
+    }
+    function book_open(path) {
+        let request = new XMLHttpRequest();
+            request.open('GET', path, true);
+            request.responseType = 'arraybuffer';
+            request.onload = function(e){
+                if (request.status === 200) {
+                    book_file   = new DataView(request.response);
+                    book_size   = Math.floor(book_file.byteLength / 16);
+                    book_loaded = true;
+                    if (book_file) console.log("Book was loaded successfully");
+                }
+            };
+            request.send(null);
+    }
+    function find_key(key) {
+        let left = 0, mid, right = book_size - 1;
+        let entry = new entry_t();
+        while (left < right) {
+            mid = Math.floor((left + right) / 2);
+            read_entry(entry, mid);
+            if (key <= entry.key) {
+                right = mid;
+            } else {
+                left = mid + 1;
+            }
+        }
+        read_entry(entry, left);
+        return (entry.key === key) ? left : book_size;
+    }
+    function read_entry(entry, index) {
+        let offset   = index * 16;
+        entry.key    = book_file.getBigUint64(offset);
+        entry.move   = book_file.getUint16(offset + 8);
+        entry.weight = book_file.getUint16(offset + 10);//use later in search
+        entry.n      = book_file.getUint32(offset + 12); // use later in search or eval
+        entry.learn  = book_file.getUint32(offset + 14); // use later in search or eval
+    }
+    function poly_to_smith(poly_move){
+        let smith = "";
+        smith += String.fromCharCode('a'.charCodeAt(0) + ((poly_move >> 6) & 7));
+        smith += String.fromCharCode('1'.charCodeAt(0) + ((poly_move >> 9) & 7));
+        smith += String.fromCharCode('a'.charCodeAt(0) + ((poly_move >> 0) & 7));
+        smith += String.fromCharCode('1'.charCodeAt(0) + ((poly_move >> 3) & 7));
+        let promotion = (poly_move >> 12) & 7;
+        if (promotion !==0) {
+            let pp = 'q';
+            switch (promotion){
+                case 1:  pp = 'n'; break;
+                case 2:  pp = 'b'; break;
+                case 3:  pp = 'r'; break;
+            }
+            smith += pp;
+        }
+        return smith;
+    }
+    function my_random(n) {
+        return Math.floor(Math.random() * (n));
+    }
     function book_move(){
+        if (book_file !== null && book_size !== 0) {
+            let best_move_poly = NO_MOVE;
+            let best_score     = 0;
+            let entry          = new entry_t();
+            for(let pos = find_key(board.current_polyglot_key); pos < book_size; pos++){
+                read_entry(entry, pos);
+                if(entry.key !== board.current_polyglot_key){
+                    break;
+                }
+                let score = entry.weight;
+                best_score += score;
+                if (my_random(best_score) < score) best_move_poly = entry.move;
+            }
+            if (best_move_poly !== NO_MOVE){
+                 let smith_move = poly_to_smith(best_move_poly);
+                 let best_move  = smith_to_move(smith_move, board);
+                 if (best_move !== NO_MOVE){
+                    return best_move;
+                }
+            }
+        }
         return NO_MOVE;
     }
 
@@ -3093,10 +3193,19 @@ let Raccoon = function(fen_pos){
         console.log(rlt.imbalance);*/
         console.log(rlt.pawns);
         console.log(rlt.threat);
+        function sum_score(phase) {
+            let total =  (
+                rlt.psqt[phase] + rlt.imbalance[phase] + rlt.pawns[phase] + rlt.pieces[phase]
+                + rlt.piece_value[phase] + rlt.mobility[phase] + rlt.threat[phase]  + rlt.passed[phase]
+                + rlt.space[phase] + rlt.king[phase]
+            );
+            return total;
+        }
+        let total_score = [0,0];
+        total_score[PHASE.MG] = sum_score(PHASE.MG);
+        total_score[PHASE.EG] = sum_score(PHASE.EG);
 
-        return rlt;
-
-
+        return total_score;
     }
     function opposite_bishops() {
         return (board.number_pieces[PIECES.WHITEBISHOP] === 1 && board.number_pieces[PIECES.BLACKBISHOP] === 1) &&
@@ -3138,152 +3247,58 @@ let Raccoon = function(fen_pos){
     }
 
     function main_evaluate(){//-- https://hxim.github.io/Stockfish-Evaluation-Guide/
-        let eval_result = game_evaluation();
-        eval_result.game_phase = phase();
-        eval_result.tempo = 28 * ((board.turn === COLORS.WHITE) ? 1 : -1);
-        eval_result.endgame *=scale_factor(eval_result.endgame)/64;
-        return (((eval_result.middlegame * eval_result.game_phase + ((eval_result.endgame * (128 - eval_result.game_phase)) << 0)) / 128) << 0) + eval_result.tempo;
+        let game_eval = game_evaluation();
+        let mg = game_eval[PHASE.MG], eg = game_eval[PHASE.EG];
+        let phase = phase(), tempo = 28 * ((board.turn === COLORS.WHITE) ? 1 : -1);
+        eg *= scale_factor(eg)/64;
+        return (((mg * phase + ((eg * (128 - phase)) << 0)) / 128) << 0) + tempo;
     }
-
-
 
 
     /*****************************************************************************
      * SEARCH
      ****************************************************************************/
-    let search_info = {
-        start_time: 0,
-        end_time:  0,
-        depth : MAX_DEPTH,
-        time_set: false,
-        move_to_go: -1,
-        infinite: false,
-        mate_in: -1,
-
-        nodes: 0,
-        max_nodes: -1,
-        quit: false,
-        stopped: false,
-
-        fail_high: 0,
-        fail_high_first: 0,
-        null_cutoff: 0,
-
-
-        use_book: false,
-
-        best_move: NO_MOVE,
-        ponder_move: NO_MOVE,
-        pondering: false,
-
-        analyzing: true,
-
-    };
-    function is_mate_score(score){
-        return (Math.abs(Math.abs(score) - CHECKMATE) < MAX_DEPTH);
-    }
-    function clear_search(){
-        for(let i  = 0; i < 13; ++i) {
-            for(let j = 0; j < BOARD_SQUARE_NUM; ++j) {
-                //board.search_history[i * BOARD_SQUARE_NUM + j] = 0;
-            }
-        }
-        for(let i  = 0; i < 2; ++i) {
-            for(let j = 0; j < MAX_DEPTH; ++j) {
-                //board.search_killers[i * MAX_DEPTH + j] = 0;
-            }
-        }
-
-        /*board.trans_table.over_write = 0;
-        board.trans_table.hit = 0;
-        board.trans_table.cut = 0;*/
-        board.ply = 0;
-
-        search_info.stopped = false;
-        search_info.nodes = 0;
-        search_info.fail_high = 0;
-        search_info.fail_high_first = 0;
-    }
-    function is_repetition(){
-        for(let i =  board.history_ply - board.half_moves; i < board.history_ply - 1; ++i){
-            if (board.current_position_key === board.history[i].current_position_key){
-                return true;
-            }
-        }
-        return false;
-    }
-    function alpha_beta(alpha, beta, depth, do_null){
-        return 100;
-    }
-    function search(options){
-        let in_san = false;
+    function search(options) {
+        let verbose   = false;
+        let use_book = book_loaded;
         if(typeof options !== 'undefined'){
-            if ('san' in options) in_san = options.san;
+            verbose  = ('verbose' in options) && options.verbose;
+            use_book = ('use_book' in options)? (options.use_book && use_book): use_book;
+            if(use_book && file_name === ""){
+                console.error("Opening book will not be used as file_name of book was empty");
+                use_book = false;
+            }
         }
-        clear_search();
-        let result = "";
 
         let best_move = NO_MOVE;
-        let is_mate = false;
-
-        if(search_info.use_book && !search_info.analyzing){
+        if (use_book){
             best_move = book_move();
         }
-
         if(best_move === NO_MOVE) {
             //-- iterative deepening
-            for (let curr_depth = 1; curr_depth <= search_info.depth; ++curr_depth) {
+        }
 
-                let bestScore = alpha_beta(-INFINITE, INFINITE, curr_depth, true);
+        let move_rlt = parse_move(best_move, verbose);
+        let print_out = (verbose)? move_rlt.san: move_rlt
+        console.log(`bestmove ${print_out}`); // UCI
 
-                //-- out of time?
-                if (search_info.stopped) {
-                    break;
-                }
-
-                if (is_mate) {
-                    break;
-                }
-
-                let num_pv = get_pv_line(curr_depth);
-                best_move  = board.trans_array[0];
-
-                if (is_mate_score(bestScore)) {
-                    is_mate = true;
-                    let mate_in = (bestScore > 0 ? CHECKMATE - bestScore + 1 : -CHECKMATE - bestScore) / 2;
-                    result += ("info score mate " +  mate_in.toString());
-                }
-                else {
-                    result += ("info score cp " + bestScore.toString());
-                }
-                result += (" depth " + curr_depth.toString() + " nodes " +  search_info.nodes.toString());
-                result += (" time " + (get_time_ms() - search_info.start_time).toString());
-                
-                for (let i = 0; i < num_pv; ++i) {
-                    result += " ";
-                    let move_tmp = board.trans_array[i];
-                    result += (in_san)? move_tmp.san: move_tmp.smith;
-                    }
-                }
-                result += '\n';
-            }
-
-        result += "bestmove "+ ((in_san)? best_move.san: best_move.smith) + "\n";
-        search_info.best_move = best_move;
-        search_info.thinking = false;
-        console.log(result);
-
-        return result;
+        return move_rlt
     }
 
     /*****************************************************************************
      * start engine and initialize
      ****************************************************************************/
     initialize();
-    if (typeof fen_pos === 'undefined') {
+    if (typeof game_option === 'undefined') {
         load(START_FEN);
     } else {
-        let loaded = load(fen_pos);
+        let fen = START_FEN;
+        if ('fen' in game_option) fen = game_option.fen;
+        if ('file_name' in game_option){
+            file_name = game_option.file_name;
+            book_open(file_name);
+        }
+        let loaded = load(fen);
         if (!loaded.value){
             let tmp = "\nFenError!\n";
             tmp  += loaded.error;
@@ -3351,6 +3366,9 @@ let Raccoon = function(fen_pos){
                 }
             }
             return null;
+        },
+        search: function(options){
+           return search(options);
         },
         put: function (options, square) {
             if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return false;
@@ -3442,7 +3460,7 @@ let Raccoon = function(fen_pos){
             let l = ["UP","DOWN", "LEFT","RIGHT","UP_LEFT","UP_RIGHT","DOWN_LEFT","DOWN_RIGHT", "SAME"]
             console.log(square_to_algebraic(f)+ " - " + square_to_algebraic(t));
            return l[get_direction(f, t)];
-        },
+        }
     };
 };
 

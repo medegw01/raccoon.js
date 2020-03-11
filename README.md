@@ -40,9 +40,15 @@ in [Forsyth-Edwards Notation](http://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwar
 // board defaults to the starting position when called with no parameters
 let raccoon = new Raccoon();
 
-// pass in a FEN string to load a particular position
+// pass in a FEN string to load a particular position and/or path to opening book
 let raccoon = new Raccoon(
-    'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'
+   'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'
+);
+let raccoon = new Raccoon(
+    {
+       fen: 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1',
+       file_name: 'book.bin'
+    }
 );
 ```
 
