@@ -3293,10 +3293,14 @@ let Raccoon = function(game_option){
         load(START_FEN);
     } else {
         let fen = START_FEN;
-        if ('fen' in game_option) fen = game_option.fen;
-        if ('file_name' in game_option){
-            file_name = game_option.file_name;
-            book_open(file_name);
+        if (typeof game_option === 'object'){
+            if ('fen' in game_option) fen = game_option.fen;
+            if ('file_name' in game_option){
+                file_name = game_option.file_name;
+                book_open(file_name);
+            }
+        } else{
+            fen =  game_option;
         }
         let loaded = load(fen);
         if (!loaded.value){
