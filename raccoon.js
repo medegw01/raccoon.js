@@ -565,7 +565,7 @@ let Raccoon = function(game_option){
             + (((board.castling_right & CASTLING.WHITE_CASTLE_OOO) !== 0)? piece_to_ascii[PIECES.WHITEQUEEN]: '')
             + (((board.castling_right & CASTLING.BLACK_CASTLE_OO) !==  0)? piece_to_ascii[PIECES.BLACKKING]: '')
             + (((board.castling_right & CASTLING.BLACK_CASTLE_OOO)!==  0)? piece_to_ascii[PIECES.BLACKQUEEN]: '');
-        ascii_t += ("\npoly key: " + board.current_polyglot_key.toString(16) +'\n');
+        ascii_t += ("\npoly key: 0x" + board.current_polyglot_key.toString(16) +'\n');
 
         return ascii_t;
     }
@@ -1664,6 +1664,7 @@ let Raccoon = function(game_option){
          return NO_MOVE;
     }
     function parse_move(move, verbose){
+        if(move === NO_MOVE) return null;
         let rlt;
         let from = FROM_SQUARE(move);
         let to   = TO_SQUARE(move);
@@ -2028,6 +2029,23 @@ let Raccoon = function(game_option){
             take_move();
         }
         return nodes;
+    }
+
+    function get(square, remove=false) {
+        if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
+        if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return null;
+
+        let sq = FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0));
+        if (SQUARE_ON_BOARD(sq) && board.pieces[sq] !== PIECES.EMPTY){
+            let rlt = {
+                type: piece_to_ascii[board.pieces[sq]],
+                color: (get_color_piece[board.pieces[sq]] === COLORS.WHITE)? 'w':'b'
+            };
+            if (remove) clear_pieces(sq);
+            return rlt;
+        }
+        return null;
+
     }
     function perft_summary(depth) {
         console.log("About to start perf testing, with depth: " + depth.toString());
@@ -3359,20 +3377,10 @@ let Raccoon = function(game_option){
             return insufficient_material();
         },
         get: function (square) {
-            if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
-            if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return null;
-
-            let sq = FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0));
-            if (SQUARE_ON_BOARD(sq) && board.pieces[sq] !== PIECES.EMPTY){
-                return {
-                    type: piece_to_ascii[board.pieces[sq]],
-                    color: (get_color_piece[board.pieces[sq]] === COLORS.WHITE)? 'w':'b'
-                }
-            }
-            return null;
+            return get(square);
         },
-        search: function(options){
-           return search(options);
+        remove: function (square) {
+            return get(square, true);
         },
         put: function (options, square) {
             if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return false;
@@ -3457,14 +3465,12 @@ let Raccoon = function(game_option){
         perft_summary: function (depth) {
             return perft_summary(depth);
         },
-        eval: function () {
+        evaluation: function () {
            return main_evaluate();
         },
-        dir: function(f, t){
-            let l = ["UP","DOWN", "LEFT","RIGHT","UP_LEFT","UP_RIGHT","DOWN_LEFT","DOWN_RIGHT", "SAME"]
-            console.log(square_to_algebraic(f)+ " - " + square_to_algebraic(t));
-           return l[get_direction(f, t)];
-        }
+        search: function(options){
+            return search(options);
+        },
     };
 };
 
