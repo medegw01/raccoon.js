@@ -3267,9 +3267,9 @@ let Raccoon = function(game_option){
     function main_evaluate(){//-- https://hxim.github.io/Stockfish-Evaluation-Guide/
         let game_eval = game_evaluation();
         let mg = game_eval[PHASE.MG], eg = game_eval[PHASE.EG];
-        let phase = phase(), tempo = 28 * ((board.turn === COLORS.WHITE) ? 1 : -1);
+        let p = phase(), tempo = 28 * ((board.turn === COLORS.WHITE) ? 1 : -1);
         eg *= scale_factor(eg)/64;
-        return (((mg * phase + ((eg * (128 - phase)) << 0)) / 128) << 0) + tempo;
+        return (((mg * p + ((eg * (128 - p)) << 0)) / 128) << 0) + tempo;
     }
 
 

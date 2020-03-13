@@ -458,23 +458,24 @@ raccoon.js:2067 Total nodes: 89363
 // => 89363
 ```
 
-### .evaluation()
-TODO
+### .evaluation() _NOT COMPLETED_
+An evaluation function used to heuristically determine the relative value of a positions, i.e. the chances of winning. 
+If we could see to the end of the game in every line, the evaluation would only have values of -inf (loss), 0 (draw), 
+and +inf (win). It considers _psqt table_, _imbalance_, _pawns_, _pieces_, _material value_, _mobility_, _threat_, 
+_passed_, _space_, and _king_.
 
-### .search(option)
-TODO
+```js
+let raccoon = new Raccoon();
 
-
-
-
-
-
-
-
-
-
-
-
-
+raccoon.evaluation(); // Positive score for white as it has the tempo
+//=> 28
 ```
+
+### .search(option) _NOT COMPLETED_
+TODO
+
+
+
+
+
 
