@@ -464,6 +464,12 @@ If we could see to the end of the game in every line, the evaluation would only 
 and +inf (win). It considers _psqt table_, _imbalance_, _pawns_, _pieces_, _material value_, _mobility_, _threat_, 
 _passed_, _space_, and _king_.
 
+TODO
+- finish _threat_
+- _passed_ pawn evaluation
+- _space_ check
+- _king_ safety
+
 ```js
 let raccoon = new Raccoon();
 
@@ -473,6 +479,28 @@ raccoon.evaluation(); // Positive score for white as it has the tempo
 
 ### .search(option) _NOT COMPLETED_
 TODO
+- Transposition table
+- Static Exchange Evaluation(See)
+- Quiescence search
+- Alpha-beta search
+    1) Aspiration window
+    2) Interactive deepening
+    3) Null move reduction
+    4) Razoring pruning
+    5) Futility pruning
+    6) Late Move Reduction
+    7) Late move pruning
+    8) History futility pruning
+- Move Ordering
+    1) Most value victim / Lowest Value Attacker
+    2) Killer moves
+    3) Butterfly history
+
+### Overall Game TODO
+For optimization
+- Bitboard representation
+- Magic bitboard
+
 
 
 

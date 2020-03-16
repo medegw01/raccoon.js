@@ -1,7 +1,7 @@
 "use strict";
 /*
-    Raccoon, analyzes chess or chess variant positions, and generates a move or list of moves that it regards as strongest
-    Copyright (C) 2020  Michael Oghenevhede Edegware  (michael.edegware@gmail.com)
+    Raccoon, analyzes chess or chess variant positions, and generates a move or list of moves that it regards as
+    strongest Copyright (C) 2020  Michael Oghenevhede Edegware  (michael.edegware@gmail.com)
 
     Raccoon is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -122,11 +122,14 @@ let Raccoon = function(game_option){
     const get_poly_piece= [
         -1, 1, 5, 3, 7, 9, 11, 0, 4, 2, 6, 8, 10
     ];
-    const color_pieceflip=[//-- color_pieceflip[COLORS][PIECES]
+    const color_pieceflip =[ //-- color_pieceflip[COLORS][PIECES]
         [PIECES.WHITEPAWN, PIECES.WHITEKNIGHT, PIECES.WHITEBISHOP, PIECES.WHITEROOK, PIECES.WHITEQUEEN, PIECES.WHITEKING],
         [PIECES.BLACKPAWN, PIECES.BLACKKNIGHT, PIECES.BLACKBISHOP, PIECES.BLACKROOK, PIECES.BLACKQUEEN, PIECES.BLACKKING]
     ];
-    const get_color_piece = [COLORS.BOTH, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK];
+    const get_color_piece = [
+        COLORS.BOTH, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE, COLORS.WHITE,
+        COLORS.WHITE, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK, COLORS.BLACK
+    ];
 
     const is_big_piece       = [false, false, true, true, true, true, true, false, true, true, true, true, true];
     const is_major_piece     = [false, false, false, false, true, true, true, false, false, false, true, true, true];
@@ -164,7 +167,6 @@ let Raccoon = function(game_option){
     ];
 
 
-    let mvvlva_scores     = new Array(13*13);
     let piece_to_ascii    = ".PBNRQKpbnrqk";
     let castle64_hash     = [0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n];
     let castle_permission = new Array(120);
@@ -306,21 +308,13 @@ let Raccoon = function(game_option){
         castle_permission[SQUARES.E8] &= ~CASTLING.BLACK_CASTLE_OOO;
         castle_permission[SQUARES.A8] &= ~CASTLING.BLACK_CASTLE_OOO;
     }
-    function initialize_mvvlva() {
-        let victim_score = [0, 100, 300, 200, 400, 500, 600, 100, 300, 200, 400, 500, 600];
-        for(let attacker = PIECES.WHITEPAWN; attacker <= PIECES.BLACKKING; ++attacker) {
-            for(let victim = PIECES.WHITEPAWN; victim <= PIECES.BLACKKING; ++victim) {
-                mvvlva_scores[victim *13 + attacker] = victim_score[victim] + 6 - (victim_score[attacker] / 100);
-            }
-        }
-    }
+
 
     function initialize() {
         initialize_square120_to_square64();
         initialize_pawns();
         initialize_hash_key();
         initialize_files_rank_array();
-        initialize_mvvlva();
         book_init();
     }
 
@@ -458,7 +452,8 @@ let Raccoon = function(game_option){
             file = fen.charCodeAt(i) - 'a'.charCodeAt(0);
             rank = fen.charCodeAt(++i) - '1'.charCodeAt(0);
 
-            if (!(file >= FILES.A_FILE && file <= FILES.H_FILE) || !(rank >= RANKS.FIRST_RANK && rank <= RANKS.EIGHTH_RANK)){
+            if (!(file >= FILES.A_FILE && file <= FILES.H_FILE)
+                || !(rank >= RANKS.FIRST_RANK && rank <= RANKS.EIGHTH_RANK)){
                 return {value: false, error: "Invalid en-passant square"};
             }
             board.enpassant = FILE_RANK_TO_SQUARE(file, rank);
@@ -561,7 +556,8 @@ let Raccoon = function(game_option){
         ascii_t += "        INFO         \n";
         ascii_t += "turn: " +  ("wb-"[board.turn]) + '\n';
         ascii_t += "enpass: " + (board.enpassant).toString() + '\n';
-        ascii_t += "castling: " + (((board.castling_right & CASTLING.WHITE_CASTLE_OO) !==  0)? piece_to_ascii[PIECES.WHITEKING]: '')
+        ascii_t += "castling: "
+            + (((board.castling_right & CASTLING.WHITE_CASTLE_OO) !==  0)? piece_to_ascii[PIECES.WHITEKING]: '')
             + (((board.castling_right & CASTLING.WHITE_CASTLE_OOO) !== 0)? piece_to_ascii[PIECES.WHITEQUEEN]: '')
             + (((board.castling_right & CASTLING.BLACK_CASTLE_OO) !==  0)? piece_to_ascii[PIECES.BLACKKING]: '')
             + (((board.castling_right & CASTLING.BLACK_CASTLE_OOO)!==  0)? piece_to_ascii[PIECES.BLACKQUEEN]: '');
@@ -1251,7 +1247,10 @@ let Raccoon = function(game_option){
     const NO_MOVE           = 0;
     const CAPTURE_BONUS     = 1000000;
     const number_directions = [0, 0, 4, 8, 4, 8, 8, 0, 4, 8, 4, 8, 8];
-    const slider            = [PIECES.WHITEBISHOP, PIECES.WHITEROOK, PIECES.WHITEQUEEN,-1, PIECES.BLACKBISHOP, PIECES.BLACKROOK, PIECES.BLACKQUEEN, -1];
+    const slider            = [
+        PIECES.WHITEBISHOP, PIECES.WHITEROOK, PIECES.WHITEQUEEN,-1, PIECES.BLACKBISHOP,
+        PIECES.BLACKROOK, PIECES.BLACKQUEEN, -1
+    ];
     const nonslider         = [PIECES.WHITEKNIGHT, PIECES.WHITEKING, -1, PIECES.BLACKKNIGHT, PIECES.BLACKKING, -1];
     const pieces_directions = [
         [ 0, 0, 0, 0, 0, 0, 0 ],
@@ -1270,26 +1269,10 @@ let Raccoon = function(game_option){
     ];
 
     function add_quiet_move(move, moves){
-        let score = 0;
-        //-- best killer
-        /*
-        if(board.search_killers[board.ply] === move){
-            score = 900000;
-        }
-        //-- better killer
-        else if(board.search_killers[MAX_DEPTH + board.ply] === move){
-            score= 800000;
-        }*/
-       /*TODO
-          else{
-            move_ord.score = board.search_history[(board.pieces[FROM_SQUARE(move)])*BOARD_SQUARE_NUM + (TO_SQUARE(move))];
-        }
-        */
-        moves.push({ move: move, score: score});
+        moves.push({ move: move, score: 0});
     }
     function add_capture_move(move, moves){
-        let score = mvvlva_scores[CAPTURED(move)*13 + (board.pieces[FROM_SQUARE(move)])] + CAPTURE_BONUS;
-        moves.push({ move: move, score: score});
+        moves.push({ move: move, score: 0});
     }
     function add_enpassant_move(move, moves){
         let score = 105 + CAPTURE_BONUS;
@@ -1382,7 +1365,8 @@ let Raccoon = function(game_option){
                 }
             }
             if(((board.castling_right & CASTLING.WHITE_CASTLE_OOO) !== 0) && !only_capture){
-                if(board.pieces[SQUARES.D1] === PIECES.EMPTY && board.pieces[SQUARES.C1] === PIECES.EMPTY && board.pieces[SQUARES.B1] === PIECES.EMPTY){
+                if(board.pieces[SQUARES.D1] === PIECES.EMPTY && board.pieces[SQUARES.C1] === PIECES.EMPTY
+                    && board.pieces[SQUARES.B1] === PIECES.EMPTY){
                     if(!is_square_attacked(SQUARES.E1, COLORS.BLACK) && !is_square_attacked(SQUARES.D1, COLORS.BLACK)){
                         add_quiet_move(MOVE(SQUARES.E1, SQUARES.C1, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
                     }
@@ -1428,7 +1412,8 @@ let Raccoon = function(game_option){
                 }
             }
             if(((board.castling_right & CASTLING.BLACK_CASTLE_OOO) !==0) && !only_capture){
-                if(board.pieces[SQUARES.D8] === PIECES.EMPTY && board.pieces[SQUARES.C8] === PIECES.EMPTY && board.pieces[SQUARES.B8] === PIECES.EMPTY){
+                if(board.pieces[SQUARES.D8] === PIECES.EMPTY && board.pieces[SQUARES.C8] === PIECES.EMPTY
+                    && board.pieces[SQUARES.B8] === PIECES.EMPTY){
                     if(!is_square_attacked(SQUARES.E8, COLORS.WHITE) && !is_square_attacked(SQUARES.D8, COLORS.WHITE)){
                         add_quiet_move(MOVE(SQUARES.E8, SQUARES.C8, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
                     }
@@ -1527,7 +1512,8 @@ let Raccoon = function(game_option){
                 if(FROM_SQUARE(move) === from && TO_SQUARE(move) === to){
                     let promotion_piece = PROMOTED(move);
                     if(promotion_piece !== PIECES.EMPTY){
-                        if((smith[4] === (piece_to_ascii[promotion_piece]).toLowerCase()) || (smith[4] === (piece_to_ascii[promotion_piece]).toUpperCase())) {
+                        if((smith[4] === (piece_to_ascii[promotion_piece]).toLowerCase())
+                            || (smith[4] === (piece_to_ascii[promotion_piece]).toUpperCase())) {
                             return move;
                         }
                         continue;
@@ -1562,9 +1548,7 @@ let Raccoon = function(game_option){
             //-- http://cfajohnson.com/chess/SAN/
             if (piece === tmp_piece && from !== tmp_from && to === tmp_to) {
                 ambiguities++;
-
                 if (ranks_board[from] === ranks_board[tmp_from]) same_rank++;
-
                 if (files_board[from] === files_board[tmp_from]) same_file++;
             }
         }
@@ -1711,7 +1695,10 @@ let Raccoon = function(game_option){
             let rank_to = ranks_board[to];
 
             let promoted = PROMOTED(move);
-            rlt += (String.fromCharCode('a'.charCodeAt(0) + file_from) + String.fromCharCode('1'.charCodeAt(0) + rank_from) + String.fromCharCode('a'.charCodeAt(0) + file_to) + String.fromCharCode('1'.charCodeAt(0) + rank_to));
+            rlt += (String.fromCharCode('a'.charCodeAt(0) + file_from) + String.fromCharCode('1'.charCodeAt(0)
+                + rank_from) + String.fromCharCode('a'.charCodeAt(0) + file_to) + String.fromCharCode('1'.charCodeAt(0)
+                + rank_to)
+            );
             if (promoted) {
                 let tmp = 'q';
                 if (is_knight[promoted]) {
@@ -2035,7 +2022,9 @@ let Raccoon = function(game_option){
         if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
         if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return null;
 
-        let sq = FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0));
+        let sq = FILE_RANK_TO_SQUARE(
+            square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0)
+        );
         if (SQUARE_ON_BOARD(sq) && board.pieces[sq] !== PIECES.EMPTY){
             let rlt = {
                 type: piece_to_ascii[board.pieces[sq]],
@@ -2543,7 +2532,8 @@ let Raccoon = function(game_option){
                 sq = FILE_RANK_TO_SQUARE(f,r);
                 pce = board.pieces[sq];
                 if(outpost_square(color, sq) && (((color === COLORS.WHITE) ^ is_white_piece[pce]) || pce === PIECES.EMPTY)){
-                    if((is_knight[board.pieces[kn_bi_sq]] && knight_attack(color, sq, kn_bi_sq)) || bishop_xray_attack(color, sq, kn_bi_sq)){
+                    if((is_knight[board.pieces[kn_bi_sq]] && knight_attack(color, sq, kn_bi_sq))
+                        || bishop_xray_attack(color, sq, kn_bi_sq)){
                         return supported(color, sq)? 2: 1;
                     }
                 }
@@ -2587,7 +2577,6 @@ let Raccoon = function(game_option){
         }
         return v;
     }
-
 
     function pieces_total(rlt) {
         //-- bonus
@@ -2656,18 +2645,24 @@ let Raccoon = function(game_option){
             for(dt of diff){
                 if((SQUARE_ON_BOARD(sq + dt + sg*10) && is_color_pawn[color][board.pieces[sq + dt + sg*10]])
                     && (SQUARE_ON_BOARD(sq + dt) && board.pieces[sq + dt] === PIECES.EMPTY)
-                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 - 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 - 1) && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 - 1]]))
-                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 + 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 + 1) && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 + 1]]))
-                    && (SQUARE_ON_BOARD(sq + dt) && (attack(color, sq + dt) || !attack(color^1, sq + dt)))){
+                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 - 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 - 1)
+                        && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 - 1]]))
+                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 + 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 + 1)
+                        && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 + 1]]))
+                    && (SQUARE_ON_BOARD(sq + dt) && (attack(color, sq + dt)
+                        || !attack(color^1, sq + dt)))){
                     return 1;
                 }
                 if((rank(color^1, sq) === 4)
                     && (is_color_pawn[color][board.pieces[sq + dt + sg*20]])
                     && (board.pieces[sq + dt + sg*10] === PIECES.EMPTY)
                     && (board.pieces[sq + dt] === PIECES.EMPTY)
-                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 - 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 - 1) && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 - 1]]))
-                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 + 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 + 1) && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 + 1]]))
-                    && (SQUARE_ON_BOARD(sq + dt) && (attack(color, sq + dt) || !attack(color^1, sq + dt)))){
+                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 - 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 - 1)
+                        && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 - 1]]))
+                    && (!SQUARE_ON_BOARD(sq + dt - sg * 10 + 1) || (SQUARE_ON_BOARD(sq + dt - sg*10 + 1)
+                        && !is_color_pawn[color^1][board.pieces[sq + dt - sg*10 + 1]]))
+                    && (SQUARE_ON_BOARD(sq + dt) && (attack(color, sq + dt)
+                        || !attack(color^1, sq + dt)))){
                     return 1;
                 }
             }
@@ -2707,8 +2702,10 @@ let Raccoon = function(game_option){
         function minor_behind_pawn(color, kn_bi_sq) {
             let pce = board.pieces[kn_bi_sq];
             if (!is_knight[pce] && !is_bishop[pce]) return 0;
-            if (color === COLORS.WHITE) return (is_white_piece[pce] && SQUARE_ON_BOARD(kn_bi_sq + 10) && is_pawn[board.pieces[kn_bi_sq + 10]]);
-            return (!is_white_piece[pce] &&  SQUARE_ON_BOARD(kn_bi_sq - 10) && is_pawn[board.pieces[kn_bi_sq - 10]]);
+            if (color === COLORS.WHITE) return (is_white_piece[pce] && SQUARE_ON_BOARD(kn_bi_sq + 10)
+                && is_pawn[board.pieces[kn_bi_sq + 10]]);
+            return (!is_white_piece[pce] &&  SQUARE_ON_BOARD(kn_bi_sq - 10)
+                && is_pawn[board.pieces[kn_bi_sq - 10]]);
         }
         function bishop_pawns(color, sq) {
             return pawns_squares[color][square_color(sq)]*(1 + central_blocked_pawns[color]);
@@ -3103,10 +3100,12 @@ let Raccoon = function(game_option){
                 let tr = trapped_rook(color, sq);
                 let c;
                 if((color === COLORS.WHITE)){
-                    c = ((board.castling_right & CASTLING.WHITE_CASTLE_OOO) || (board.castling_right & CASTLING.WHITE_CASTLE_OO))? 1: 2;
+                    c = ((board.castling_right & CASTLING.WHITE_CASTLE_OOO)
+                        || (board.castling_right & CASTLING.WHITE_CASTLE_OO))? 1: 2;
                 }
                 else{
-                    c = ((board.castling_right & CASTLING.BLACK_CASTLE_OO) || (board.castling_right & CASTLING.BLACK_CASTLE_OOO))? 1: 2;
+                    c = ((board.castling_right & CASTLING.BLACK_CASTLE_OO)
+                        || (board.castling_right & CASTLING.BLACK_CASTLE_OOO))? 1: 2;
                 }
                 v.pieces[PHASE.EG] -= tr*trapped_rook_t[PHASE.EG]*c;
                 v.pieces[PHASE.MG] -= tr*trapped_rook_t[PHASE.MG]*c;
@@ -3176,14 +3175,20 @@ let Raccoon = function(game_option){
         rlt.pawns[PHASE.MG] += (white_pp.pawns[PHASE.MG] - black_pp.pawns[PHASE.MG]);
         rlt.pawns[PHASE.EG] += (white_pp.pawns[PHASE.EG] - black_pp.pawns[PHASE.EG]);
 
-        rlt.mobility[PHASE.MG] += (white_q.mobility[PHASE.MG] + white_p.mobility[PHASE.MG] - black_q.mobility[PHASE.MG] - black_p.mobility[PHASE.MG]);
-        rlt.mobility[PHASE.EG] += (white_q.mobility[PHASE.EG] + white_p.mobility[PHASE.EG] - black_q.mobility[PHASE.EG] - black_p.mobility[PHASE.EG]);
+        rlt.mobility[PHASE.MG] += (white_q.mobility[PHASE.MG] + white_p.mobility[PHASE.MG] - black_q.mobility[PHASE.MG]
+            - black_p.mobility[PHASE.MG]);
+        rlt.mobility[PHASE.EG] += (white_q.mobility[PHASE.EG] + white_p.mobility[PHASE.EG] - black_q.mobility[PHASE.EG]
+            - black_p.mobility[PHASE.EG]);
 
-        rlt.psqt[PHASE.MG]   += (white_pp.psqt[PHASE.MG] + white_q.psqt[PHASE.MG] + white_p.psqt[PHASE.MG] - black_pp.psqt[PHASE.MG] - black_q.psqt[PHASE.MG] - black_p.psqt[PHASE.MG]);
-        rlt.psqt[PHASE.EG]   += (white_pp.psqt[PHASE.EG] + white_q.psqt[PHASE.EG] + white_p.psqt[PHASE.EG] - black_pp.psqt[PHASE.EG] - black_q.psqt[PHASE.EG] - black_p.psqt[PHASE.EG]);
+        rlt.psqt[PHASE.MG]   += (white_pp.psqt[PHASE.MG] + white_q.psqt[PHASE.MG] + white_p.psqt[PHASE.MG]
+            - black_pp.psqt[PHASE.MG] - black_q.psqt[PHASE.MG] - black_p.psqt[PHASE.MG]);
+        rlt.psqt[PHASE.EG]   += (white_pp.psqt[PHASE.EG] + white_q.psqt[PHASE.EG] + white_p.psqt[PHASE.EG]
+            - black_pp.psqt[PHASE.EG] - black_q.psqt[PHASE.EG] - black_p.psqt[PHASE.EG]);
 
-        rlt.pieces[PHASE.MG] += (white_q.pieces[PHASE.MG] + white_p.pieces[PHASE.MG] - black_q.pieces[PHASE.MG] - black_p.pieces[PHASE.MG]);
-        rlt.pieces[PHASE.EG] += (white_q.pieces[PHASE.EG] + white_p.pieces[PHASE.EG] - black_q.pieces[PHASE.EG] - black_p.pieces[PHASE.EG]);
+        rlt.pieces[PHASE.MG] += (white_q.pieces[PHASE.MG] + white_p.pieces[PHASE.MG] - black_q.pieces[PHASE.MG]
+            - black_p.pieces[PHASE.MG]);
+        rlt.pieces[PHASE.EG] += (white_q.pieces[PHASE.EG] + white_p.pieces[PHASE.EG] - black_q.pieces[PHASE.EG]
+            - black_p.pieces[PHASE.EG]);
 
         rlt.threat[PHASE.MG] += (
             (black_pp.threat[PHASE.MG] + black_q.threat[PHASE.MG] + black_p.threat[PHASE.MG])
@@ -3236,12 +3241,15 @@ let Raccoon = function(game_option){
 
         let pc_white = board.number_pieces[(pos_w === COLORS.WHITE)? PIECES.WHITEPAWN: PIECES.BLACKPAWN];
         let pc_black = board.number_pieces[(pos_b === COLORS.WHITE)? PIECES.WHITEPAWN: PIECES.BLACKPAWN];
-        let npm_white = board.material_mg[pos_w] - get_value_piece[PHASE.MG][PIECES.WHITEKING] - get_value_piece[PHASE.MG][pos_w]*pc_white;
-        let npm_black = board.material_mg[pos_b] - get_value_piece[PHASE.MG][PIECES.BLACKKING] - get_value_piece[PHASE.MG][pos_b]*pc_black;
+        let npm_white = board.material_mg[pos_w] - get_value_piece[PHASE.MG][PIECES.WHITEKING]
+            - get_value_piece[PHASE.MG][pos_w]*pc_white;
+        let npm_black = board.material_mg[pos_b] - get_value_piece[PHASE.MG][PIECES.BLACKKING]
+            - get_value_piece[PHASE.MG][pos_b]*pc_black;
 
         let bishopValueMg = get_value_piece[PHASE.MG][PIECES.WHITEBISHOP];
         let rookValueMg = get_value_piece[PHASE.MG][PIECES.WHITEROOK];
-        if (pc_white === 0 && npm_white - npm_black <= bishopValueMg) sf = npm_white < rookValueMg ? 0 : npm_black <= bishopValueMg ? 4 : 14;
+        if (pc_white === 0 && npm_white - npm_black <= bishopValueMg)
+            sf = npm_white < rookValueMg ? 0 : npm_black <= bishopValueMg ? 4 : 14;
         if (sf === 64) {
             let ob = +opposite_bishops();
             if (ob && npm_white === bishopValueMg && npm_black === bishopValueMg) {
@@ -3257,8 +3265,10 @@ let Raccoon = function(game_option){
     function phase() {//-- assume middle game and white perspective
         let mg_limit = 15258;
         let eg_limit = 3915;
-        let npm_white = board.material_mg[COLORS.WHITE] - get_value_piece[PHASE.MG][PIECES.WHITEKING] - get_value_piece[PHASE.MG][PIECES.WHITEPAWN]*board.number_pieces[PIECES.WHITEPAWN];
-        let npm_black = board.material_mg[COLORS.BLACK] - get_value_piece[PHASE.MG][PIECES.BLACKKING] - get_value_piece[PHASE.MG][PIECES.BLACKPAWN]*board.number_pieces[PIECES.BLACKPAWN];
+        let npm_white = board.material_mg[COLORS.WHITE] - get_value_piece[PHASE.MG][PIECES.WHITEKING]
+            - get_value_piece[PHASE.MG][PIECES.WHITEPAWN]*board.number_pieces[PIECES.WHITEPAWN];
+        let npm_black = board.material_mg[COLORS.BLACK] - get_value_piece[PHASE.MG][PIECES.BLACKKING]
+            - get_value_piece[PHASE.MG][PIECES.BLACKPAWN]*board.number_pieces[PIECES.BLACKPAWN];
         let npm = npm_black + npm_white;
         npm = Math.max(eg_limit, Math.min(npm, mg_limit));
         return (((npm - eg_limit) * 128) / (mg_limit - eg_limit)) << 0;
@@ -3385,7 +3395,9 @@ let Raccoon = function(game_option){
         put: function (options, square) {
             if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return false;
             if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return false;
-            let sq = FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0));
+            let sq = FILE_RANK_TO_SQUARE(
+                square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0)
+            );
             let look = (options.color === 'w')? (options.type).toUpperCase(): (options.type).toLowerCase();
             let pce = -1;
             for(let i=0; i< 13; i++){
@@ -3434,7 +3446,9 @@ let Raccoon = function(game_option){
             if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
             if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return null;
 
-            let sq_c = square_color(FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0)));
+            let sq_c = square_color(
+                FILE_RANK_TO_SQUARE(square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0))
+            );
             return (sq_c === COLORS.BLACK)? 'dark' : 'light';
         },
         in_check: function () {
