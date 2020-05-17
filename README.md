@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/medegw01/raccoon.js.svg?branch=master)](https://travis-ci.org/medegw01/raccoon.js)
 
-raccoon.js is a Javascript chess library that is used for chess position evaluation; best move search; move generation 
+raccoon.js is a JavaScript chess engine that is used for chess position evaluation; best move search; move generation 
 or validation; piece placement or movement; check, checkmate, stalemate, and insufficient material detection. 
 
 raccoon.js has been extensively tested in node.js and most modern browsers.
@@ -23,11 +23,25 @@ while (!raccoon.game_over()) {
 console.log(raccoon.ascii()) /* replace with pgn */
 ```
 
+This can also be used as a UCI chess engine via Workers. Below show how this can be done
+```js
+let raccoon = new Worker('raccoon.js');
+
+raccoon.onmessage = function (e) {
+  $('#dump').append(e.data);      //receive message from raccoon engine
+};
+/* send UCI commands as in below */
+
+raccoon.postMessage('uci');         
+raccoon.postMessage('ucinewgame'); 
+raccoon.postMessage('position startpos');
+raccoon.postMessage('go depth 10'); 
+```
+For more information on UCI Protocol, visit [UCIProtocol](http://wbec-ridderkerk.nl/html/UCIProtocol.html)
+
 Need a user interface? Try Chris Oakman's excellent
-[chessboard.js](http://chessboardjs.com) library. See
-[chessboard.js - Random vs Random](http://chessboardjs.com/examples#5002) for
-an example integration of [chess.js](https://github.com/jhlywa/chess.js) with chessboard.js. raccoon.js is designed with same
-API's as chess.js and can be use  in the same way.
+[chessboard.js](http://chessboardjs.com) library. See [My personal Website](http://www.edegware.com/#chess_container)
+and the [Integration Source code](https://github.com/medegw01/PersonalSite-V3/blob/master/js/raccoon_integration.js)
 
 ## API
 
@@ -43,12 +57,6 @@ let raccoon = new Raccoon();
 // pass in a FEN string to load a particular position and/or path to opening book
 let raccoon = new Raccoon(
    'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'
-);
-let raccoon = new Raccoon(
-    {
-       fen: 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1',
-       file_name: 'book.bin'
-    }
 );
 ```
 
@@ -317,8 +325,10 @@ The _flags_ field in verbose mode may contain one or more of the following value
 -   'e' - an en passant capture
 -   'c' - a standard capture
 -   'p' - a promotion
+-   'pc' - promotion with a capture
 -   'k' - kingside castling
 -   'q' - queenside castling
+
 
 A flag of 'pc' would mean that a pawn captured a piece on the 8th rank and promoted.
 
@@ -458,6 +468,36 @@ raccoon.js:2067 Total nodes: 89363
 // => 89363
 ```
 
+### .set_book(arrayBuffer)
+A functions that allows you tho send the chess book used by the engine. The book should first be send in the form of
+arrayBuffer. One way to open a book is,
+
+```js
+let bookBuffer = null;
+var bookRequest = new XMLHttpRequest();
+bookRequest.open('GET', 'book.bin', true);
+bookRequest.responseType = "arraybuffer";
+bookRequest.onload = function(event) {
+  if(bookRequest.status == 200){
+     bookBuffer = bookRequest.response;
+     engine.postMessage({book: bookRequest.response});
+    }
+    
+};
+bookRequest.send(null);
+
+if(bookBuffer){
+// can be used via API
+let raccoon = new Raccoon();
+raccoon.set_book(bookBuffer);
+
+//OR via worker as
+let engine = Worker("racccon.js");
+engine.postMessage({book: bookBuffer}); //This is a work around and not an actual UCI command
+
+}
+
+```
 ### .evaluation() _NOT COMPLETED_
 An evaluation function used to heuristically determine the relative value of a positions, i.e. the chances of winning. 
 If we could see to the end of the game in every line, the evaluation would only have values of -inf (loss), 0 (draw), 
@@ -500,6 +540,7 @@ TODO
 For optimization
 - Bitboard representation
 - Magic bitboard
+- UCI protocol
 
 
 

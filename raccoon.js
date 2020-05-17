@@ -1,6 +1,5 @@
-"use strict";
 /*
-    Raccoon, analyzes chess or chess variant positions, and generates a move or list of moves that it regards as
+    Raccoon analyzes chess or chess variant positions and generates a move or list of moves that it regards as
     strongest Copyright (C) 2020  Michael Oghenevhede Edegware  (michael.edegware@gmail.com)
 
     Raccoon is free software: you can redistribute it and/or modify
@@ -16,7 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-let Raccoon = function(game_option){
+"use strict";
+let stop = false;
+let Raccoon = function(game_option) {
     /*****************************************************************************
      * Board constants
      ****************************************************************************/
@@ -28,9 +29,6 @@ let Raccoon = function(game_option){
     const MAX_MOVES_POSITION  = 256;
     const BOARD_SQUARE_NUM    = 120;
     const MAX_DEPTH           = 64;
-    if (typeof require !== 'undefined'){
-        const fs = require('fs');
-    }
 
     const PIECES  = {
         EMPTY: 0,
@@ -107,6 +105,8 @@ let Raccoon = function(game_option){
     /*****************************************************************************
      * GAME CONSTANTS
      ****************************************************************************/
+    let initial_fen = START_FEN;
+    let pgn_header  = {};
     let files_board = new Array(BOARD_SQUARE_NUM);
     let ranks_board = new Array(BOARD_SQUARE_NUM);
 
@@ -376,7 +376,7 @@ let Raccoon = function(game_option){
         let square_64_  = 0;
         let square_120_ = 0;
         let i = 0;
-        if(n===0) return {value: false, error: "Empty fen provided"};
+        if(n===0) return {valid: false, error: "Empty fen provided"};
 
         clear();
         while ((rank >= RANKS.FIRST_RANK) && (i < n)) {
@@ -413,7 +413,7 @@ let Raccoon = function(game_option){
                     i++;
                     continue;
                 default:
-                    return {value: false, error: "Illegal character " + fen[i]};
+                    return {valid: false, error: "Illegal character " + fen[i]};
 
             }
             for(let j = 0; j< count; j++){
@@ -428,7 +428,7 @@ let Raccoon = function(game_option){
         }
 
         if (!(fen[i] === 'w' || fen[i] === 'b')){
-            return {value: false, error: 'Side to move is invalid. It should be w or b'};
+            return {valid: false, error: 'Side to move is invalid. It should be w or b'};
         }
         board.turn = (fen[i] === 'w')? COLORS.WHITE : COLORS.BLACK;
         i += 2;
@@ -454,7 +454,7 @@ let Raccoon = function(game_option){
 
             if (!(file >= FILES.A_FILE && file <= FILES.H_FILE)
                 || !(rank >= RANKS.FIRST_RANK && rank <= RANKS.EIGHTH_RANK)){
-                return {value: false, error: "Invalid en-passant square"};
+                return {valid: false, error: "Invalid en-passant square"};
             }
             board.enpassant = FILE_RANK_TO_SQUARE(file, rank);
         }
@@ -466,7 +466,7 @@ let Raccoon = function(game_option){
         }
         i++;
         let half_move = parseInt(half);
-        if (half_move < 0) return {value: false, error: "Half move cannot be a negative integer"};
+        if (half_move < 0) return {valid: false, error: "Half move cannot be a negative integer"};
 
         let full ="";
         while(i < n) {
@@ -474,7 +474,7 @@ let Raccoon = function(game_option){
         }
 
         let full_move = parseInt(full);
-        if(full_move < 1 ) return {value: false, error: 'Full move must be greater than 0'};
+        if(full_move < 1 ) return {valid: false, error: 'Full move must be greater than 0'};
 
         board.half_moves = half_move;
         board.history_ply = 0;
@@ -482,7 +482,8 @@ let Raccoon = function(game_option){
         board.full_moves = full_move;
         board.current_polyglot_key = polyglot_key();
         update_list_material();
-        return {value: true, error: 'no error!'};
+        initial_fen = fen;
+        return {valid:  true, error: 'no error!'};
 
     }
     function fen() {
@@ -625,7 +626,7 @@ let Raccoon = function(game_option){
      * HASH
      ****************************************************************************/
 
-    //-- http://hgm.nubati.net/book_format.html
+        //-- http://hgm.nubati.net/book_format.html
     const  random64_poly = [
             BigInt("0x9D39247E33776D41"), BigInt("0x2AF7398005AAA5C7"), BigInt("0x44DB015024623547"), BigInt("0x9C15F73E62A76AE2"),
             BigInt("0x75834465489C0C89"), BigInt("0x3290AC3A203001BF"), BigInt("0x0FBBAD1F61042279"), BigInt("0xE83A908FF2FB60CA"),
@@ -891,10 +892,10 @@ let Raccoon = function(game_option){
                 if(is_major_piece[piece])board.number_major_pieces[color]++;
                 if(is_minor_piece[piece])board.number_minor_pieces[color]++;
 
-               board.material_mg[color] += get_value_piece[PHASE.MG][piece];
-               board.material_eg[color] += get_value_piece[PHASE.EG][piece];
-               board.piece_list[(PIECE_INDEX(piece, board.number_pieces[piece]))] = square;
-               board.number_pieces[piece]++;
+                board.material_mg[color] += get_value_piece[PHASE.MG][piece];
+                board.material_eg[color] += get_value_piece[PHASE.EG][piece];
+                board.piece_list[(PIECE_INDEX(piece, board.number_pieces[piece]))] = square;
+                board.number_pieces[piece]++;
 
                 if(piece === PIECES.WHITEKING)board.kings[COLORS.WHITE] = square;
                 if(piece === PIECES.BLACKKING)board.kings[COLORS.BLACK] = square;
@@ -1322,53 +1323,57 @@ let Raccoon = function(game_option){
             add_quiet_move(MOVE(from, to, PIECES.EMPTY, PIECES.EMPTY, 0), moves);
         }
     }
-    function generate_moves(only_capture = false) {
+    function generate_moves(only_capture = false, square = null) {
         let moves = [];
         let turn = board.turn;
-        if(turn === COLORS.WHITE){
+        if(turn === COLORS.WHITE) {
             //-- generate white pawn moves
-            for(let p = 0; p < board.number_pieces[PIECES.WHITEPAWN]; p++){
+            for (let p = 0; p < board.number_pieces[PIECES.WHITEPAWN]; p++) {
                 let sq = board.piece_list[PIECE_INDEX(PIECES.WHITEPAWN, p)];
-                //-- forward move
-                if((board.pieces[sq + 10] === PIECES.EMPTY) && !only_capture){
-                    add_white_pawn_move(sq, sq+10, moves);
+                if (square === null || square === sq) {
+                    //-- forward move
+                    if ((board.pieces[sq + 10] === PIECES.EMPTY) && !only_capture) {
+                        add_white_pawn_move(sq, sq + 10, moves);
 
-                    if(ranks_board[sq] === RANKS.SECOND_RANK && board.pieces[sq + 20] === PIECES.EMPTY){
-                        add_quiet_move(MOVE(sq, sq+20, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.PAWN_START), moves);
+                        if (ranks_board[sq] === RANKS.SECOND_RANK && board.pieces[sq + 20] === PIECES.EMPTY) {
+                            add_quiet_move(MOVE(sq, sq + 20, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.PAWN_START), moves);
+                        }
                     }
-                }
-                //-- capture move
-                if(SQUARE_ON_BOARD(sq+ 9) && get_color_piece[board.pieces[sq+9]] === COLORS.BLACK){
-                    add_white_pawn_capture_move(sq, sq + 9, board.pieces[sq+9], moves);
-                }
-                if(SQUARE_ON_BOARD(sq+ 11) && get_color_piece[board.pieces[sq+11]] ===  COLORS.BLACK){
-                    add_white_pawn_capture_move(sq, sq + 11, board.pieces[sq+11], moves);
-                }
+                    //-- capture move
+                    if (SQUARE_ON_BOARD(sq + 9) && get_color_piece[board.pieces[sq + 9]] === COLORS.BLACK) {
+                        add_white_pawn_capture_move(sq, sq + 9, board.pieces[sq + 9], moves);
+                    }
+                    if (SQUARE_ON_BOARD(sq + 11) && get_color_piece[board.pieces[sq + 11]] === COLORS.BLACK) {
+                        add_white_pawn_capture_move(sq, sq + 11, board.pieces[sq + 11], moves);
+                    }
 
-                if(board.enpassant !== SQUARES.OFF_SQUARE){
-                    if(sq + 9 === board.enpassant){
-                        add_enpassant_move(MOVE(sq, sq+9,  PIECES.EMPTY,  PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
-                    }
-                    if(sq + 11 === board.enpassant){
-                        add_enpassant_move(MOVE(sq, sq+11, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                    if (board.enpassant !== SQUARES.OFF_SQUARE) {
+                        if (sq + 9 === board.enpassant) {
+                            add_enpassant_move(MOVE(sq, sq + 9, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                        }
+                        if (sq + 11 === board.enpassant) {
+                            add_enpassant_move(MOVE(sq, sq + 11, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                        }
                     }
                 }
 
             }
 
             //-- castling
-            if(((board.castling_right & CASTLING.WHITE_CASTLE_OO) !==0) && !only_capture){
-                if(board.pieces[SQUARES.F1] === PIECES.EMPTY && board.pieces[SQUARES.G1] === PIECES.EMPTY ){
-                    if(!is_square_attacked(SQUARES.E1, COLORS.BLACK) && !is_square_attacked(SQUARES.F1, COLORS.BLACK)){
-                        add_quiet_move(MOVE(SQUARES.E1, SQUARES.G1, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+            if (square === null || square === board.kings[COLORS.WHITE]){
+                if (((board.castling_right & CASTLING.WHITE_CASTLE_OO) !== 0) && !only_capture) {
+                    if (board.pieces[SQUARES.F1] === PIECES.EMPTY && board.pieces[SQUARES.G1] === PIECES.EMPTY) {
+                        if (!is_square_attacked(SQUARES.E1, COLORS.BLACK) && !is_square_attacked(SQUARES.F1, COLORS.BLACK)) {
+                            add_quiet_move(MOVE(SQUARES.E1, SQUARES.G1, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                        }
                     }
                 }
-            }
-            if(((board.castling_right & CASTLING.WHITE_CASTLE_OOO) !== 0) && !only_capture){
-                if(board.pieces[SQUARES.D1] === PIECES.EMPTY && board.pieces[SQUARES.C1] === PIECES.EMPTY
-                    && board.pieces[SQUARES.B1] === PIECES.EMPTY){
-                    if(!is_square_attacked(SQUARES.E1, COLORS.BLACK) && !is_square_attacked(SQUARES.D1, COLORS.BLACK)){
-                        add_quiet_move(MOVE(SQUARES.E1, SQUARES.C1, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                if (((board.castling_right & CASTLING.WHITE_CASTLE_OOO) !== 0) && !only_capture) {
+                    if (board.pieces[SQUARES.D1] === PIECES.EMPTY && board.pieces[SQUARES.C1] === PIECES.EMPTY
+                        && board.pieces[SQUARES.B1] === PIECES.EMPTY) {
+                        if (!is_square_attacked(SQUARES.E1, COLORS.BLACK) && !is_square_attacked(SQUARES.D1, COLORS.BLACK)) {
+                            add_quiet_move(MOVE(SQUARES.E1, SQUARES.C1, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                        }
                     }
                 }
             }
@@ -1377,45 +1382,49 @@ let Raccoon = function(game_option){
             //generate black pawn moves
             for(let p = 0; p < board.number_pieces[PIECES.BLACKPAWN]; p++){
                 let sq = board.piece_list[PIECE_INDEX(PIECES.BLACKPAWN, p)];
-                //-- forward move
-                if((board.pieces[sq - 10] === PIECES.EMPTY) && !only_capture){
-                    add_black_pawn_move(sq, sq - 10, moves);
-                    if(ranks_board[sq] === RANKS.SEVENTH_RANK && board.pieces[sq - 20] === PIECES.EMPTY){
-                        add_quiet_move(MOVE(sq, sq-20, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.PAWN_START), moves);
+                if (square === null || square === sq) {
+                    //-- forward move
+                    if ((board.pieces[sq - 10] === PIECES.EMPTY) && !only_capture) {
+                        add_black_pawn_move(sq, sq - 10, moves);
+                        if (ranks_board[sq] === RANKS.SEVENTH_RANK && board.pieces[sq - 20] === PIECES.EMPTY) {
+                            add_quiet_move(MOVE(sq, sq - 20, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.PAWN_START), moves);
+                        }
                     }
-                }
-                //-- capture move
-                if(SQUARE_ON_BOARD(sq - 9) && get_color_piece[board.pieces[sq-9]] === COLORS.WHITE){
-                    add_black_pawn_capture_move(sq, sq - 9, board.pieces[sq-9], moves);
-                }
-                if(SQUARE_ON_BOARD(sq - 11) && get_color_piece[board.pieces[sq-11]] ===  COLORS.WHITE){
-                    add_black_pawn_capture_move(sq, sq - 11, board.pieces[sq-11], moves);
-                }
+                    //-- capture move
+                    if (SQUARE_ON_BOARD(sq - 9) && get_color_piece[board.pieces[sq - 9]] === COLORS.WHITE) {
+                        add_black_pawn_capture_move(sq, sq - 9, board.pieces[sq - 9], moves);
+                    }
+                    if (SQUARE_ON_BOARD(sq - 11) && get_color_piece[board.pieces[sq - 11]] === COLORS.WHITE) {
+                        add_black_pawn_capture_move(sq, sq - 11, board.pieces[sq - 11], moves);
+                    }
 
-                if( board.enpassant !== SQUARES.OFF_SQUARE){
-                    if(sq - 9 === board.enpassant){
-                        add_enpassant_move(MOVE(sq, sq-9,  PIECES.EMPTY,  PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
-                    }
-                    if(sq - 11 === board.enpassant){
-                        add_enpassant_move(MOVE(sq, sq-11, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                    if (board.enpassant !== SQUARES.OFF_SQUARE) {
+                        if (sq - 9 === board.enpassant) {
+                            add_enpassant_move(MOVE(sq, sq - 9, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                        }
+                        if (sq - 11 === board.enpassant) {
+                            add_enpassant_move(MOVE(sq, sq - 11, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.ENPASS), moves);
+                        }
                     }
                 }
             }
 
 
             //-- castling
-            if(((board.castling_right & CASTLING.BLACK_CASTLE_OO) !==0) && !only_capture){
-                if(board.pieces[SQUARES.F8] === PIECES.EMPTY && board.pieces[SQUARES.G8] === PIECES.EMPTY ){
-                    if(!is_square_attacked(SQUARES.E8, COLORS.WHITE) && !is_square_attacked(SQUARES.F8, COLORS.WHITE)){
-                        add_quiet_move(MOVE(SQUARES.E8, SQUARES.G8, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+            if (square === null || square === board.kings[COLORS.BLACK]) {
+                if (((board.castling_right & CASTLING.BLACK_CASTLE_OO) !== 0) && !only_capture) {
+                    if (board.pieces[SQUARES.F8] === PIECES.EMPTY && board.pieces[SQUARES.G8] === PIECES.EMPTY) {
+                        if (!is_square_attacked(SQUARES.E8, COLORS.WHITE) && !is_square_attacked(SQUARES.F8, COLORS.WHITE)) {
+                            add_quiet_move(MOVE(SQUARES.E8, SQUARES.G8, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                        }
                     }
                 }
-            }
-            if(((board.castling_right & CASTLING.BLACK_CASTLE_OOO) !==0) && !only_capture){
-                if(board.pieces[SQUARES.D8] === PIECES.EMPTY && board.pieces[SQUARES.C8] === PIECES.EMPTY
-                    && board.pieces[SQUARES.B8] === PIECES.EMPTY){
-                    if(!is_square_attacked(SQUARES.E8, COLORS.WHITE) && !is_square_attacked(SQUARES.D8, COLORS.WHITE)){
-                        add_quiet_move(MOVE(SQUARES.E8, SQUARES.C8, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                if (((board.castling_right & CASTLING.BLACK_CASTLE_OOO) !== 0) && !only_capture) {
+                    if (board.pieces[SQUARES.D8] === PIECES.EMPTY && board.pieces[SQUARES.C8] === PIECES.EMPTY
+                        && board.pieces[SQUARES.B8] === PIECES.EMPTY) {
+                        if (!is_square_attacked(SQUARES.E8, COLORS.WHITE) && !is_square_attacked(SQUARES.D8, COLORS.WHITE)) {
+                            add_quiet_move(MOVE(SQUARES.E8, SQUARES.C8, PIECES.EMPTY, PIECES.EMPTY, MOVE_FLAG.CASTLE), moves);
+                        }
                     }
                 }
             }
@@ -1426,21 +1435,23 @@ let Raccoon = function(game_option){
         while(p !== -1){
             for(let pceNum = 0; pceNum < board.number_pieces[p]; ++pceNum) {
                 let sq = board.piece_list[PIECE_INDEX(p,pceNum)];
-                if(SQUARE_ON_BOARD(sq)){
-                    for(let i =0; i<number_directions[p]; i++){
-                        let dir = pieces_directions[p][i];
-                        let to_square = sq + dir;
-                        while(SQUARE_ON_BOARD(to_square)) {
-                            if(board.pieces[to_square] !== PIECES.EMPTY){
-                                if(get_color_piece[board.pieces[to_square]] === (turn ^ 1)){
-                                    add_capture_move(MOVE(sq, to_square, board.pieces[to_square], PIECES.EMPTY, 0), moves);
+                if (square === null || square === sq) {
+                    if (SQUARE_ON_BOARD(sq)) {
+                        for (let i = 0; i < number_directions[p]; i++) {
+                            let dir = pieces_directions[p][i];
+                            let to_square = sq + dir;
+                            while (SQUARE_ON_BOARD(to_square)) {
+                                if (board.pieces[to_square] !== PIECES.EMPTY) {
+                                    if (get_color_piece[board.pieces[to_square]] === (turn ^ 1)) {
+                                        add_capture_move(MOVE(sq, to_square, board.pieces[to_square], PIECES.EMPTY, 0), moves);
+                                    }
+                                    break;
                                 }
-                                break;
+                                if (!only_capture) {
+                                    add_quiet_move(MOVE(sq, to_square, PIECES.EMPTY, PIECES.EMPTY, 0), moves);
+                                }
+                                to_square += dir;
                             }
-                            if (!only_capture) {
-                                add_quiet_move(MOVE(sq, to_square, PIECES.EMPTY, PIECES.EMPTY, 0), moves);
-                            }
-                            to_square += dir;
                         }
                     }
                 }
@@ -1453,22 +1464,24 @@ let Raccoon = function(game_option){
         while(p !== -1){
             for(let pceNum = 0; pceNum < board.number_pieces[p]; ++pceNum) {
                 let sq = board.piece_list[PIECE_INDEX(p,pceNum)];
-                if (SQUARE_ON_BOARD(sq)){
-                    for(let i =0; i<number_directions[p]; i++) {
-                        let dir = pieces_directions[p][i];
-                        let to_square = sq + dir;
+                if (square === null || square === sq) {
+                    if (SQUARE_ON_BOARD(sq)) {
+                        for (let i = 0; i < number_directions[p]; i++) {
+                            let dir = pieces_directions[p][i];
+                            let to_square = sq + dir;
 
-                        if (!SQUARE_ON_BOARD(to_square)) {
-                            continue;
-                        }
-                        if (board.pieces[to_square] !== PIECES.EMPTY) {
-                            if (get_color_piece[board.pieces[to_square]] === (turn ^ 1)) {
-                                add_capture_move(MOVE(sq, to_square, board.pieces[to_square], PIECES.EMPTY, 0), moves);
+                            if (!SQUARE_ON_BOARD(to_square)) {
+                                continue;
                             }
-                            continue;
-                        }
-                        if (!only_capture) {
-                            add_quiet_move(MOVE(sq, to_square, PIECES.EMPTY, PIECES.EMPTY, 0), moves);
+                            if (board.pieces[to_square] !== PIECES.EMPTY) {
+                                if (get_color_piece[board.pieces[to_square]] === (turn ^ 1)) {
+                                    add_capture_move(MOVE(sq, to_square, board.pieces[to_square], PIECES.EMPTY, 0), moves);
+                                }
+                                continue;
+                            }
+                            if (!only_capture) {
+                                add_quiet_move(MOVE(sq, to_square, PIECES.EMPTY, PIECES.EMPTY, 0), moves);
+                            }
                         }
                     }
                 }
@@ -1478,15 +1491,15 @@ let Raccoon = function(game_option){
         return moves;
     }
 
-    function legal_moves(capture=false) {
-        let moves_t_move = generate_moves(capture);
+    function legal_moves(capture=false, square=null) {
+        let moves_t_move = generate_moves(capture, square);
         let rlt = [];
         for(let i  = 0; i <moves_t_move.length; i++){
             let tmp_move = moves_t_move[i].move;
-            if(!make_move(tmp_move)) {
+            if(!make_move(tmp_move, false)) {
                 continue;
             }
-            rlt.push( moves_t_move[i]);
+            rlt.push(moves_t_move[i]);
             take_move();
         }
         return rlt;
@@ -1569,11 +1582,11 @@ let Raccoon = function(game_option){
             if (same_rank > 0 && same_file > 0) {
                 diamb += square_to_algebraic(FROM_SQUARE(move));
             }
-            else if(same_rank > 0){
-                diamb += String.fromCharCode('a'.charCodeAt(0) + files_board[from]);
-            }
             else if(same_file > 0){
-                diamb += String.fromCharCode('1'.charCodeAt(0) + ranks_board[from]);
+                diamb += square_to_algebraic(from).charAt(1);
+            }
+            else {
+                diamb += square_to_algebraic(from).charAt(0);
             }
         }
         return diamb;
@@ -1621,7 +1634,7 @@ let Raccoon = function(game_option){
             }
             if(verbose){
                 let check = false;
-                if (make_move(move)){
+                if (make_move(move, false)){
                     check = in_check();
                     if(in_checkmate()){
                         san += "#";
@@ -1645,7 +1658,7 @@ let Raccoon = function(game_option){
         for(move of legal){
             if(san == move_to_san(move.move)) return move.move;
         }
-         return NO_MOVE;
+        return NO_MOVE;
     }
     function parse_move(move, verbose){
         if(move === NO_MOVE) return null;
@@ -1659,7 +1672,12 @@ let Raccoon = function(game_option){
             rlt.to     = square_to_algebraic(to);
             rlt.color  = "wb-"[board.turn];
             rlt.pieces = (piece_to_ascii[board.pieces[from]]).toLowerCase();
-            if ((move & MOVE_FLAG.CAPTURED) !==0){
+            if ((move & MOVE_FLAG.CAPTURED) !==0 && (move & MOVE_FLAG.PROMOTED) !==0) {
+                rlt.flag = 'pc';
+                rlt.captured = (piece_to_ascii[CAPTURED(move)]).toLowerCase();
+                rlt.promoted = (piece_to_ascii[PROMOTED(move)]).toLowerCase();
+            }
+            else if ((move & MOVE_FLAG.CAPTURED) !==0){
                 rlt.flag = 'c';
                 rlt.captured = (piece_to_ascii[CAPTURED(move)]).toLowerCase();
             }
@@ -1684,7 +1702,7 @@ let Raccoon = function(game_option){
             else{
                 rlt.flag = 'n'
             }
-            rlt.san = move_to_san(move, false);
+            rlt.san = move_to_san(move, true);
         }
         else {
             rlt = "";
@@ -1696,8 +1714,8 @@ let Raccoon = function(game_option){
 
             let promoted = PROMOTED(move);
             rlt += (String.fromCharCode('a'.charCodeAt(0) + file_from) + String.fromCharCode('1'.charCodeAt(0)
-                + rank_from) + String.fromCharCode('a'.charCodeAt(0) + file_to) + String.fromCharCode('1'.charCodeAt(0)
-                + rank_to)
+                    + rank_from) + String.fromCharCode('a'.charCodeAt(0) + file_to) + String.fromCharCode('1'.charCodeAt(0)
+                    + rank_to)
             );
             if (promoted) {
                 let tmp = 'q';
@@ -1747,7 +1765,7 @@ let Raccoon = function(game_option){
                     t_pceNum = index;
                     break;
                 }
-           }
+            }
 
             board.number_pieces[pce]--;
             board.piece_list[PIECE_INDEX(pce,t_pceNum)] = board.piece_list[PIECE_INDEX(pce, board.number_pieces[pce])];
@@ -1811,7 +1829,7 @@ let Raccoon = function(game_option){
 
             let pce_ind = random_piece + get_poly_piece[pce] * 64;
             board.current_polyglot_key ^= random64_poly[pce_ind + square_64(from)]
-                                    ^ random64_poly[pce_ind + square_64(to)];
+                ^ random64_poly[pce_ind + square_64(to)];
         }
         return rcd;
     }
@@ -1872,6 +1890,7 @@ let Raccoon = function(game_option){
 
     }
     function make_move(move, summary= true){
+        if(move === NO_MOVE) return false
         let from = FROM_SQUARE(move);
         let to  = TO_SQUARE(move);
 
@@ -2017,21 +2036,27 @@ let Raccoon = function(game_option){
         }
         return nodes;
     }
-
-    function get(square, remove=false) {
+    function algebraic_to_square(square) {
         if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
         if(square[0].charCodeAt(0) >'h'.charCodeAt(0) || square[0].charCodeAt(0) < 'a'.charCodeAt(0)) return null;
 
         let sq = FILE_RANK_TO_SQUARE(
             square[0].charCodeAt(0) - 'a'.charCodeAt(0), square[1].charCodeAt(0)-'1'.charCodeAt(0)
         );
-        if (SQUARE_ON_BOARD(sq) && board.pieces[sq] !== PIECES.EMPTY){
-            let rlt = {
-                type: piece_to_ascii[board.pieces[sq]],
-                color: (get_color_piece[board.pieces[sq]] === COLORS.WHITE)? 'w':'b'
-            };
-            if (remove) clear_pieces(sq);
-            return rlt;
+        return sq;
+    }
+
+    function get(square, remove=false) {
+        let sq = algebraic_to_square(square);
+        if (sq){
+            if (SQUARE_ON_BOARD(sq) && board.pieces[sq] !== PIECES.EMPTY){
+                let rlt = {
+                    type: piece_to_ascii[board.pieces[sq]],
+                    color: (get_color_piece[board.pieces[sq]] === COLORS.WHITE)? 'w':'b'
+                };
+                if (remove) clear_pieces(sq);
+                return rlt;
+            }
         }
         return null;
 
@@ -2063,7 +2088,6 @@ let Raccoon = function(game_option){
 
     let book_file;
     let book_size;
-    let book_loaded = false;
     class entry_t {
         constructor() {
             this.key    = BigInt(0);
@@ -2077,19 +2101,10 @@ let Raccoon = function(game_option){
         book_file     = null;
         book_size     = 0;
     }
-    function book_open(path) {
-        let request = new XMLHttpRequest();
-            request.open('GET', path, true);
-            request.responseType = 'arraybuffer';
-            request.onload = function(e){
-                if (request.status === 200) {
-                    book_file   = new DataView(request.response);
-                    book_size   = Math.floor(book_file.byteLength / 16);
-                    book_loaded = true;
-                    if (book_file) console.log("Book was loaded successfully");
-                }
-            };
-            request.send(null);
+    function book_open(arrayBuffer) {
+        book_file   = new DataView(arrayBuffer);
+        book_size   = Math.floor(book_file.byteLength / 16);
+        return book_file !== null;
     }
     function find_key(key) {
         let left = 0, mid, right = book_size - 1;
@@ -2150,9 +2165,9 @@ let Raccoon = function(game_option){
                 if (my_random(best_score) < score) best_move_poly = entry.move;
             }
             if (best_move_poly !== NO_MOVE){
-                 let smith_move = poly_to_smith(best_move_poly);
-                 let best_move  = smith_to_move(smith_move, board);
-                 if (best_move !== NO_MOVE){
+                let smith_move = poly_to_smith(best_move_poly);
+                let best_move  = smith_to_move(smith_move, board);
+                if (best_move !== NO_MOVE){
                     return best_move;
                 }
             }
@@ -2339,8 +2354,8 @@ let Raccoon = function(game_option){
     ];
     // Polynomial material imbalance parameters
     const qo= [
-    //            OUR PIECES
-    // pair pawn knight bishop rook queen
+        //            OUR PIECES
+        // pair pawn knight bishop rook queen
         [1438                               ], // Bishop pair
         [  40,   38                         ], // Pawn
         [  32,  255, -62                    ], // Knight      OUR PIECES
@@ -2567,12 +2582,12 @@ let Raccoon = function(game_option){
         if(!is_knight[b] && !is_bishop[b] && !is_rook_or_queen[b]) return 0;
         for(f = FILES.A_FILE; f<= FILES.H_FILE; f++){
             for (r = RANKS.FIRST_RANK; r <= RANKS.EIGHTH_RANK; r++){
-               sq_tmp = FILE_RANK_TO_SQUARE(f, r);
-               if (!mobility_area(color, sq_tmp)) continue;
-               if (!is_color_queen[color][board.pieces[sq_tmp]] && is_knight[b] && knight_attack(color, sq_tmp, sq)) v++;
-               if (!is_color_queen[color][board.pieces[sq_tmp]] && is_bishop[b] && bishop_xray_attack(color, sq_tmp, sq)) v++;
-               if (is_rook[b] && rook_xray_attack(color, sq_tmp, sq)) v++;
-               if (is_queen[b] && queen_attack(color, sq_tmp, sq)) v++;
+                sq_tmp = FILE_RANK_TO_SQUARE(f, r);
+                if (!mobility_area(color, sq_tmp)) continue;
+                if (!is_color_queen[color][board.pieces[sq_tmp]] && is_knight[b] && knight_attack(color, sq_tmp, sq)) v++;
+                if (!is_color_queen[color][board.pieces[sq_tmp]] && is_bishop[b] && bishop_xray_attack(color, sq_tmp, sq)) v++;
+                if (is_rook[b] && rook_xray_attack(color, sq_tmp, sq)) v++;
+                if (is_queen[b] && queen_attack(color, sq_tmp, sq)) v++;
             }
         }
         return v;
@@ -2733,7 +2748,7 @@ let Raccoon = function(game_option){
             let sq_pce, i, dir_tmp;
             let o_r = (color===COLORS.WHITE)? PIECES.BLACKROOK: PIECES.WHITEROOK;
             let o_b = (color===COLORS.WHITE)? PIECES.BLACKBISHOP: PIECES.WHITEBISHOP;
-            
+
             function relative_pin_or_discover(from, to, dir) {
                 let seen = false;
                 while(SQUARE_ON_BOARD(from) && from !== to){
@@ -2892,7 +2907,7 @@ let Raccoon = function(game_option){
                     v.pawns[PHASE.EG] -= weak_lever_pawn[PHASE.EG];
                 }
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -2940,7 +2955,7 @@ let Raccoon = function(game_option){
                 v.mobility[PHASE.MG] += mobility_bonus[PHASE.MG][3][mb];
 
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -2985,7 +3000,7 @@ let Raccoon = function(game_option){
                 v.pieces[PHASE.EG] += minor_behind_t[PHASE.EG]*mbp;
                 v.pieces[PHASE.MG] += minor_behind_t[PHASE.MG]*mbp;
 
-                 //-- king protector
+                //-- king protector
                 let kp = king_protector(color, sq);
                 v.pieces[PHASE.EG] -= king_protection_t[PHASE.EG]*kp;
                 v.pieces[PHASE.MG] -= king_protection_t[PHASE.MG]*kp;
@@ -2996,7 +3011,7 @@ let Raccoon = function(game_option){
                 v.mobility[PHASE.MG] += mobility_bonus[PHASE.MG][0][mb];
 
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -3055,7 +3070,7 @@ let Raccoon = function(game_option){
                 v.mobility[PHASE.MG] += mobility_bonus[PHASE.MG][1][mb];
 
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -3116,7 +3131,7 @@ let Raccoon = function(game_option){
                 v.mobility[PHASE.MG] += mobility_bonus[PHASE.MG][2][mb];
 
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -3145,7 +3160,7 @@ let Raccoon = function(game_option){
                     v.psqt[PHASE.MG] += king_psqt[PHASE.MG][flip[square_64(sq)]];
                 }
                 /*** Threats ***/
-                // -- hanging
+                    // -- hanging
                 let hg = 0;//hanging(color^1, sq);
                 v.threat[PHASE.MG] += hanging_t[PHASE.MG]*hg;
                 v.threat[PHASE.EG] += hanging_t[PHASE.EG]*hg;
@@ -3286,16 +3301,18 @@ let Raccoon = function(game_option){
     /*****************************************************************************
      * SEARCH
      ****************************************************************************/
+    function engine_to_gui(printer, data) {
+        printer(data);
+    }
     function search(options) {
         let verbose   = false;
-        let use_book = book_loaded;
+        let use_book = (book_file !== null);
+        let print_function = (typeof onmessage !== "undefined")? postMessage: console.log;
+
         if(typeof options !== 'undefined'){
             verbose  = ('verbose' in options) && options.verbose;
             use_book = ('use_book' in options)? (options.use_book && use_book): use_book;
-            if(use_book && file_name === ""){
-                console.error("Opening book will not be used as file_name of book was empty");
-                use_book = false;
-            }
+            print_function = ('print_function' in options)? options.print_function:  print_function;
         }
 
         let best_move = NO_MOVE;
@@ -3303,14 +3320,19 @@ let Raccoon = function(game_option){
             best_move = book_move();
         }
         if(best_move === NO_MOVE) {
+            let moves = legal_moves();
+            // return random move for now
+            best_move = moves[Math.floor(Math.random() * moves.length)].move;
             //-- iterative deepening
         }
 
-        let move_rlt = parse_move(best_move, verbose);
-        let print_out = (verbose)? move_rlt.san: move_rlt
-        console.log(`bestmove ${print_out}`); // UCI
+        engine_to_gui(print_function, 'info score cp 20  depth 3 nodes 423 time 15 pv f1c4 g8f6 b1c3');
 
-        return move_rlt
+        let best_move_out = parse_move(best_move, verbose);
+        engine_to_gui(print_function, 'bestmove ' + best_move_out);
+
+
+        return best_move_out;
     }
 
     /*****************************************************************************
@@ -3320,18 +3342,8 @@ let Raccoon = function(game_option){
     if (typeof game_option === 'undefined') {
         load(START_FEN);
     } else {
-        let fen = START_FEN;
-        if (typeof game_option === 'object'){
-            if ('fen' in game_option) fen = game_option.fen;
-            if ('file_name' in game_option){
-                file_name = game_option.file_name;
-                book_open(file_name);
-            }
-        } else{
-            fen =  game_option;
-        }
-        let loaded = load(fen);
-        if (!loaded.value){
+        let loaded = load(game_option);
+        if (!loaded.valid){
             let tmp = "\nFenError!\n";
             tmp  += loaded.error;
             tmp += "\nTry Raccoon() or Raccoon('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')";
@@ -3347,10 +3359,10 @@ let Raccoon = function(game_option){
             return load(fen_pos);
         },
         fen: function (){
-           return fen();
+            return fen();
         },
         ascii: function (){
-           return ascii();
+            return ascii();
         },
         polyglot: function(by_move = false){
             if(by_move){
@@ -3365,15 +3377,23 @@ let Raccoon = function(game_option){
             return (board.turn === COLORS.WHITE)? 'w': 'b'  ;
         },
         clear: function () {
-           return clear();
+            return clear();
         },
         moves: function (options) {
             let rlt = [];
-            let verbose= false;
+            let verbose = false;
+            let attack  = false;
+            let square  = null;
             if(typeof options !== 'undefined'){
                 if ('verbose' in options) verbose = options.verbose;
+                if ('square' in options) {
+                    square = algebraic_to_square(options.square);
+                    if (square === null) return rlt;
+
+                }
+                if ('attack' in options) attack = options.attack;
             }
-            let moves_t_move = legal_moves();
+            let moves_t_move = legal_moves(attack, square);
             for(let i  = 0; i <moves_t_move.length; i++){
                 let tmp_move = moves_t_move[i].move;
                 let parsed_move = parse_move(tmp_move, verbose);
@@ -3415,7 +3435,7 @@ let Raccoon = function(game_option){
             }
             return false;
         },
-        move: function (move) {//--takes only smith notation for now, SAN TODO
+        move: function (move) {
             let move_t;
             if(typeof move === 'string'){
                 let maybe_smith = clean_smith(move);
@@ -3440,7 +3460,7 @@ let Raccoon = function(game_option){
             return null;
         },
         undo: function () {
-           return take_move();
+            return take_move();
         },
         square_color: function(square){
             if(square[1].charCodeAt(0) >'8'.charCodeAt(0) || square[1].charCodeAt(0) < '1'.charCodeAt(0)) return null;
@@ -3455,7 +3475,7 @@ let Raccoon = function(game_option){
             return in_check();
         },
         in_checkmate: function () {
-          return in_checkmate();
+            return in_checkmate();
         },
         in_stalemate: function(){
             return in_stalemate();
@@ -3479,8 +3499,62 @@ let Raccoon = function(game_option){
         perft_summary: function (depth) {
             return perft_summary(depth);
         },
+        header: function(){
+            for (let i = 0; i < arguments.length; i += 2) {
+                if (typeof arguments[i] === 'string' && typeof arguments[i + 1] === 'string') {
+                    pgn_header[arguments[i]] = arguments[i + 1]
+                }
+            }
+            return pgn_header;
+        },
+        pgn: function(){
+            let his = history({verbose: true});
+            let rlt_str = (board.turn === COLORS.WHITE)? "0 1": "1 0";
+            let result  = (in_checkmate())? rlt_str: "*";
+            let pgn_str = "";
+            for (let key in pgn_header){
+                if (key == 'Result') pgn_header[key] = result;
+                pgn_str += '[' + key + " " + '"' + pgn_header[key] +'"]\n';
+            }
+
+            if (!('FEN' in pgn_header)) pgn_str += '[FEN "' + initial_fen + '"]\n';
+            pgn_str += '\n';
+
+            let str = "";
+            if (his.length > 0){
+                let i = 0;
+                let swap = 1;
+                let move_num = 1;
+                if ((his[0].color) === 'b') {
+                    str += ('1 .... ') + his[0].san;
+                    i = 1;
+                    move_num = 2;
+                }
+                for(; i < his.length; i++){
+                    if(swap){
+                        str += ((move_num).toString()) + ". " + his[i].san + " ";
+                        move_num++;
+                    }else{
+                        str += his[i].san;
+                        if((move_num % 8) === 0){
+                            str += '\n';
+                        }else{
+                            str += " ";
+                        }
+                    }
+                    swap ^= 1;
+                }
+            }
+            str += " " + result;
+            pgn_str += str;
+
+            return pgn_str;
+        },
         evaluation: function () {
-           return main_evaluate();
+            return main_evaluate();
+        },
+        set_book: function(arrayBuffer){
+            return book_open(arrayBuffer)
         },
         search: function(options){
             return search(options);
@@ -3488,11 +3562,135 @@ let Raccoon = function(game_option){
     };
 };
 
-
-//-- export Raccoon object if using node or any other CommonJS compatible environment
-if (typeof exports !== 'undefined') exports.Raccoon = Raccoon;
-//-- export Chess object for any RequireJS compatible environment
-if (typeof define !== 'undefined')
+if (typeof exports !== 'undefined') { // node or any other CommonJS compatible environment
+    exports.Raccoon = Raccoon;
+}
+else if (typeof define !== 'undefined') { // RequireJS compatible environment
     define(function() {
         return Raccoon;
     });
+}
+
+else if (typeof onmessage !== "undefined" && (typeof window === "undefined" || typeof window.document === "undefined")) { // Is it a web worker?
+    function get_number(token, re, def) {
+        let r = re.exec(token);
+        return r ? r[1] | 0 : def;
+    }
+
+    let VERSION    = "1.0.0";
+    let NAME       = "Raccoon";
+    let START_FEN  = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    let RACCOON    = Raccoon();
+
+    onmessage = function (e) {
+        let info = {
+            quit: false,
+            use_book: true,
+            analyzing: false,
+            opponent: "Guest",
+            pondering: false,
+            can_ponder: false,
+            stopped: false,
+            pv_line: 1,
+        };
+        if (typeof e.data == 'object') {
+            if(e.data.book) {
+                if(RACCOON.set_book(e.data.book)){
+                    postMessage('Successfully loaded book');
+                } else{
+                    postMessage('Error loading book');
+                }
+            }
+        }
+        else {
+            (/^(.*?)\n?$/).exec(e.data);
+            let token = RegExp.$1;
+            if (token === "stop") {
+                info.stopped = true;
+                stop = true;
+            } else if (token === "quit") {
+                info.quit = true;
+            } else if (token === 'ucinewgame') {
+                RACCOON.load(START_FEN);
+            }
+            /*TODO  else if (token === 'ponderhit'){
+                info.ponder = false;
+                info.clear_search = false; // switch from pondering to normal search
+            }*/
+            else if (token === "uci") {
+                postMessage('id name ' + NAME + ' ' + VERSION);
+                postMessage('id author Michael Edegware');
+                postMessage('option name OwnBook type check default ' + info.use_book); /* TODO DEBATING */
+                postMessage('option name Ponder type check default ' + info.can_ponder);
+                postMessage('option name MultiPV type spin default ' + info.pv_line + ' min 1 max 3');
+                postMessage('option name UCI_AnalyseMode type check default ' + info.analyzing);
+                postMessage('option name UCI_Opponent type string default ' + info.opponent);
+                postMessage('uciok');
+            } else if (token === "isready") {
+                postMessage('readyok');
+            } else if ((/^go /).exec(token)) {
+                info.time_set = false;
+                info.start_time = Date.now();
+                info.depth = get_number(token, /depth (\d+)/, 64);
+                info.nodes = 0;
+                info.mate = get_number(token, /mate (\d+)/, 0);
+                info.ponder = token.includes('ponder');
+                info.infinite = token.includes('infinite');
+                info.max_nodes = get_number(token, /nodes (\d+)/, 0);
+                info.clear_search = true;
+
+                let r = /searchmoves\s*(.*)/.exec(token);
+                info.search_move = r ? r[1].split(' ') : [];
+
+                let movetime = get_number(token, /movetime (\d+)/, 0);
+                let movestogo = get_number(token, /movestogo (\d+)/, 32);
+                let time = RACCOON.turn() === 'w' ? get_number(token, /wtime (\d+)/, -1) : get_number(token, /btime (\d+)/, 0);
+                let inc = RACCOON.turn() === 'w' ? get_number(token, /winc (\d+)/, 0) : get_number(token, /binc (\d+)/, 0);
+
+                if (movetime) {
+                    time = movetime;
+                    movestogo = 1;
+                }
+
+                if (time) {
+                    info.time_set = true;
+                    time = Math.floor(movetime / movestogo);
+                    time -= 0x20;
+                    info.end_time = info.start_time + time + inc;
+                }
+
+                info.depth = info.mate !== 0 ? 2 * info.mate - 1 : info.depth;
+                RACCOON.search(info);
+            } else if ((/^position (?:(startpos)|fen (.*?))\s*(?:moves\s*(.*))?$/).exec(token)) {
+                let fen = (RegExp.$1 === 'startpos') ? START_FEN : RegExp.$2;
+                RACCOON.load(fen);
+                if (RegExp.$3) {
+                    let moves = (RegExp.$3).split(' ');
+                    for (let i = 0; i < moves.length; i++) {
+                        if (!RACCOON.move(moves[i])) break;
+                    }
+                }
+            } else if ((/setoption name (\S+) value\s*(.*)/).exec(token)) {
+                if (RegExp.$1 === "OwnBook") {
+                    info.use_book = (RegExp.$2).includes('true');
+                } else if (RegExp.$1 === "MultiPV") {
+                    info.pv_line = parseInt(RegExp.$2);
+                } else if (RegExp.$1 === "UCI_AnalyseMode") {
+                    info.analyzing = (RegExp.$2).includes('true');
+                } else if (RegExp.$1 === "Ponder") {
+                    info.analyzing = (RegExp.$2).includes('true');
+
+                } else if (RegExp.$1 === "UCI_Opponent") {
+                    info.opponent = RegExp.$2
+                } else {
+                    postMessage('Unknown command ' + token);
+                }
+                console.log(info);
+            } else {
+                postMessage('Unknown command ' + token);
+            }
+        }
+    }
+
+}
+
